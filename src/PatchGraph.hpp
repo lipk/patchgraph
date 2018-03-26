@@ -62,8 +62,12 @@ struct Patch
     void print() const;
 };
 
-std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>>
-split(std::shared_ptr<Patch>&& patch, i32 where_i, bool vertical);
+std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
+    std::shared_ptr<Patch>&& patch,
+    i32 where_i,
+    bool vertical,
+    u8 luFocus,
+    u8 rdFocus);
 
 struct DoublePatchGraph
 {

@@ -32,14 +32,14 @@ void draw_block(SDL_Renderer* rnd, const Patch& block)
     }
 }
 
-void split(std::vector<std::shared_ptr<Patch>>& blocks,
-           size_t which,
-           size_t where,
-           bool vertical)
+void splitAndFocus(std::vector<std::shared_ptr<Patch>>& blocks,
+                   size_t which,
+                   size_t where,
+                   bool vertical)
 {
     auto bl = blocks[which];
     blocks.erase(blocks.begin() + which);
-    auto nbl = split(std::move(bl), where, vertical);
+    auto nbl = splitAndFocus(std::move(bl), where, vertical, 0, 0);
     blocks.push_back(nbl.first);
     blocks.push_back(nbl.second);
 }
@@ -75,7 +75,7 @@ int main()
     bl->prepareBuffer();
     blocks[0]->print();
     std::cout << "---" << std::endl;
-    split(blocks, 0, 3, true);
+    splitAndFocus(blocks, 0, 3, true);
     blocks[0]->print();
     blocks[1]->print();
     std::cout << "---" << std::endl;
@@ -84,7 +84,7 @@ int main()
     blocks[0]->print();
     blocks[1]->print();
     std::cout << "---" << std::endl;
-    split(blocks, 0, 2, false);
+    splitAndFocus(blocks, 0, 2, false);
     blocks[0]->print();
     blocks[1]->print();
     blocks[2]->print();

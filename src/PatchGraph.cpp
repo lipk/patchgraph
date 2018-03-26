@@ -38,8 +38,12 @@ static size_t splitEdge(std::vector<std::shared_ptr<Section>>& edge,
     assert(false);
 }
 
-std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>>
-split(std::shared_ptr<Patch>&& patch, i32 where_i, bool vertical)
+std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
+    std::shared_ptr<Patch>&& patch,
+    i32 where_i,
+    bool vertical,
+    u8 luFocus,
+    u8 rdFocus)
 {
     Side side = vertical ? RIGHT : DOWN;
     Side pside = vertical ? UP : LEFT;
@@ -150,8 +154,8 @@ split(std::shared_ptr<Patch>&& patch, i32 where_i, bool vertical)
     sharedEdge->length[0] = luPatch->parallelDimension(side);
     luPatch->edge(side).push_back(sharedEdge);
     rdPatch->edge(~side).push_back(sharedEdge);
-    luPatch->prepareBuffer();
-    rdPatch->prepareBuffer();
+    zoomIn(*luPatch, luFocus);
+    zoomIn(*rdPatch, rdFocus);
     return { luPatch, rdPatch };
 }
 
