@@ -54,7 +54,8 @@ struct Patch
     T read(u32 x, u32 y) const;
     void write(u32 x, u32 y, T value);
     void writeEdge(u32 i, Side side, T value);
-    T sample(FracRView pos, FracRView size, Side side) const;
+    std::tuple<u32, u32, u32, u32, u32>
+    synchronizationParameters(FracRView pos, FracRView depth, Side side) const;
     T sum(frac2 pos, frac2 size) const;
     void synchronizeSection(std::shared_ptr<Section> section, Side side);
     u32 fracToLength(FracRView frac) const;

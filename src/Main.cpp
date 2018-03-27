@@ -69,7 +69,7 @@ int main()
 {
     std::vector<std::shared_ptr<Patch>> blocks;
     auto bl = std::make_shared<Patch>();
-    bl->dimensions = frac2(5, 5);
+    bl->dimensions = frac2(7, 7);
 
     blocks.push_back(bl);
     bl->prepareBuffer();

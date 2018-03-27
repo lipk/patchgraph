@@ -325,39 +325,45 @@ void Patch::writeEdge(u32 i, Side side, Patch::T value)
     }
 }
 
-Patch::T Patch::sample(FracRView pos, FracRView size, Side side) const
+std::tuple<u32, u32, u32, u32, u32> Patch::synchronizationParameters(
+    FracRView pos,
+    FracRView depth,
+    Side side) const
 {
-    u32 sizeU32 = size.denom() >= this->dimensions[0].denom()
-                      ? 1
-                      : this->fracToLength(size);
-    u32 fromX, fromY;
+    u32 cellSize = depth.denom() >= this->dimensions[0].denom()
+                       ? 1U
+                       : this->fracToLength(depth);
+    u32 fromX, fromY, deltaX, deltaY;
     switch (side) {
         case LEFT:
             fromX = 1;
-            fromY = this->fracToLength(pos);
+            fromY = 1 + this->fracToLength(pos);
+            deltaX = 0;
+            deltaY = cellSize;
             break;
         case RIGHT:
-            fromX = this->dimensions[0].nom() - sizeU32;
-            fromY = this->fracToLength(pos);
+            fromX = 1 + this->dimensions[0].nom() - cellSize;
+            fromY = 1 + this->fracToLength(pos);
+            deltaX = 0;
+            deltaY = cellSize;
             break;
         case UP:
-            fromX = this->fracToLength(pos);
+            fromX = 1 + this->fracToLength(pos);
             fromY = 1;
+            deltaX = cellSize;
+            deltaY = 0;
             break;
         case DOWN:
-            fromX = this->fracToLength(pos);
-            fromY = this->dimensions[1].nom() - sizeU32;
+            fromX = 1 + this->fracToLength(pos);
+            fromY = 1 + this->dimensions[1].nom() - cellSize;
+            deltaX = cellSize;
+            deltaY = 0;
             break;
         default:
             assert(false);
     }
-    u32 sum = 0;
-    for (u32 x = fromX; x < fromX + sizeU32; ++x) {
-        for (u32 y = fromY; y < fromY + sizeU32; ++y) {
-            sum += this->read(x, y);
-        }
-    }
-    return sum;
+
+    return std::make_tuple(fromX, fromY, deltaX, deltaY, cellSize);
 }
 
 u32 Patch::fracToLength(FracRView frac) const
@@ -374,16 +380,29 @@ u32 Patch::fracToLength(FracRView frac) const
 
 void Patch::synchronizeSection(std::shared_ptr<Section> section, Side side)
 {
-    for (auto i = frac1(0U); i[0] < section->length[0];
-         i[0] += this->dimensions.unit()[0]) {
-        u32 coord = 1U + this->fracToLength(i[0] + section->position(~side));
-        auto otherPatch = section->patch(side).lock();
-        auto otherPos = section->position(side);
-        this->writeEdge(coord,
-                        side,
-                        otherPatch->sample(otherPos + i[0],
-                                           this->dimensions.unit()[0],
-                                           ~side));
+    auto that = section->patch(side).lock();
+    u32 fromX, fromY, deltaX, deltaY, thatCellSize;
+    std::tie(fromX, fromY, deltaX, deltaY, thatCellSize) =
+        that->synchronizationParameters(
+            section->position(side), this->dimensions.unit()[0], ~side);
+    u32 thisCellSize = thatCellSize == 1U
+                           ? this->fracToLength(that->dimensions.unit()[0])
+                           : 1U;
+
+    u32 offset = 1 + this->fracToLength(section->position(~side));
+    for (u32 i = 0; i < this->fracToLength(section->length[0]);
+         i += thisCellSize) {
+        double sum = 0.0;
+        for (u32 x = fromX; x < fromX + thatCellSize; ++x) {
+            for (u32 y = fromY; y < fromY + thatCellSize; ++y) {
+                sum += that->read(x, y);
+            }
+        }
+        for (u32 j = 0; j < thisCellSize; ++j) {
+            this->writeEdge(offset + i + j, side, sum);
+        }
+        fromX += deltaX;
+        fromY += deltaY;
     }
 }
 
