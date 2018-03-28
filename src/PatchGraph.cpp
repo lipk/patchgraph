@@ -143,13 +143,15 @@ std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
         auto luSection = luPatch->edge(pside).back();
         std::get<0>(rdCorners) = std::make_shared<Corner>(
             luSection->leftOrUpPatch, luSection->leftOrUpPosition, ~pside);
-        std::get<0>(rdCorners)->position[0] -= rdPatch->dimensions.unit()[0];
+        std::get<0>(rdCorners)->position[0] +=
+            luSection->leftOrUpPosition[0] + luPatch->dimensions.unit()[0];
     }
     if (!luPatch->edge(~pside).empty()) {
         auto rdSection = luPatch->edge(~pside)[0];
         std::get<1>(rdCorners) = std::make_shared<Corner>(
             rdSection->rightOrDownPatch, rdSection->rightOrDownPosition, pside);
-        std::get<1>(rdCorners)->position[0] -= rdPatch->dimensions.unit()[0];
+        std::get<1>(rdCorners)->position[0] +=
+            rdSection->rightOrDownPosition[0] + rdPatch->dimensions.unit()[0];
     }
 
     auto sharedEdge = std::make_shared<Section>();
