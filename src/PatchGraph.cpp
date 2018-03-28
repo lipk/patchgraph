@@ -85,45 +85,24 @@ std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
                                 patch->edge(pside).end());
     for (auto& corner : patch->cornersOnEdge(pside)) {
         if (corner->position[0] < luPatch->parallelDimension(pside)) {
+            corner->patch = luPatch;
             luPatch->cornersOnEdge(pside).push_back(std::move(corner));
         } else {
             corner->position[0] -= luPatch->parallelDimension(pside);
+            corner->patch = rdPatch;
             rdPatch->cornersOnEdge(pside).push_back(std::move(corner));
         }
     }
     for (auto& corner : patch->cornersOnEdge(~pside)) {
         if (corner->position[0] < luPatch->parallelDimension(~pside)) {
+            corner->patch = luPatch;
             luPatch->cornersOnEdge(~pside).push_back(std::move(corner));
         } else {
             corner->position[0] -= luPatch->parallelDimension(~pside);
+            corner->patch = rdPatch;
             rdPatch->cornersOnEdge(~pside).push_back(std::move(corner));
         }
     }
-    auto luCorners = luPatch->corners(side);
-    if (!rdPatch->edge(pside).empty()) {
-        auto luSection = rdPatch->edge(pside)[0];
-        std::get<0>(luCorners) = std::make_shared<Corner>(
-            luSection->leftOrUpPatch, luSection->leftOrUpPosition);
-    }
-    if (!rdPatch->edge(~pside).empty()) {
-        auto rdSection = rdPatch->edge(~pside)[0];
-        std::get<1>(luCorners) = std::make_shared<Corner>(
-            rdSection->rightOrDownPatch, rdSection->rightOrDownPosition);
-    }
-    auto rdCorners = rdPatch->corners(~side);
-    if (!luPatch->edge(pside).empty()) {
-        auto luSection = luPatch->edge(pside).back();
-        std::get<0>(rdCorners) = std::make_shared<Corner>(
-            luSection->leftOrUpPatch, luSection->leftOrUpPosition);
-        std::get<0>(rdCorners)->position[0] -= rdPatch->dimensions.unit()[0];
-    }
-    if (!luPatch->edge(~pside).empty()) {
-        auto rdSection = luPatch->edge(~pside)[0];
-        std::get<1>(rdCorners) = std::make_shared<Corner>(
-            rdSection->rightOrDownPatch, rdSection->rightOrDownPosition);
-        std::get<0>(rdCorners)->position[0] -= rdPatch->dimensions.unit()[0];
-    }
-
     for (auto& section : luPatch->edge(pside)) {
         section->rightOrDownPatch = luPatch;
     }
@@ -146,6 +125,31 @@ std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
         section->leftOrUpPosition = farSideOffset;
         section->leftOrUpPatch = rdPatch;
         farSideOffset[0] += section->length[0];
+    }
+
+    auto luCorners = luPatch->corners(side);
+    if (!rdPatch->edge(pside).empty()) {
+        auto luSection = rdPatch->edge(pside)[0];
+        std::get<0>(luCorners) = std::make_shared<Corner>(
+            luSection->leftOrUpPatch, luSection->leftOrUpPosition, ~pside);
+    }
+    if (!rdPatch->edge(~pside).empty()) {
+        auto rdSection = rdPatch->edge(~pside)[0];
+        std::get<1>(luCorners) = std::make_shared<Corner>(
+            rdSection->rightOrDownPatch, rdSection->rightOrDownPosition, pside);
+    }
+    auto rdCorners = rdPatch->corners(~side);
+    if (!luPatch->edge(pside).empty()) {
+        auto luSection = luPatch->edge(pside).back();
+        std::get<0>(rdCorners) = std::make_shared<Corner>(
+            luSection->leftOrUpPatch, luSection->leftOrUpPosition, ~pside);
+        std::get<0>(rdCorners)->position[0] -= rdPatch->dimensions.unit()[0];
+    }
+    if (!luPatch->edge(~pside).empty()) {
+        auto rdSection = luPatch->edge(~pside)[0];
+        std::get<1>(rdCorners) = std::make_shared<Corner>(
+            rdSection->rightOrDownPatch, rdSection->rightOrDownPosition, pside);
+        std::get<1>(rdCorners)->position[0] -= rdPatch->dimensions.unit()[0];
     }
 
     auto sharedEdge = std::make_shared<Section>();
@@ -393,8 +397,8 @@ void Patch::synchronizeSection(std::shared_ptr<Section> section, Side side)
     for (u32 i = 0; i < this->fracToLength(section->length[0]);
          i += thisCellSize) {
         double sum = 0.0;
-        for (u32 x = fromX; x < fromX + thatCellSize; ++x) {
-            for (u32 y = fromY; y < fromY + thatCellSize; ++y) {
+        for (u32 y = fromY; y < fromY + thatCellSize; ++y) {
+            for (u32 x = fromX; x < fromX + thatCellSize; ++x) {
                 sum += that->read(x, y);
             }
         }
@@ -404,6 +408,22 @@ void Patch::synchronizeSection(std::shared_ptr<Section> section, Side side)
         fromX += deltaX;
         fromY += deltaY;
     }
+}
+
+Patch::T Patch::synchronizeCorner(const std::shared_ptr<Corner>& corner)
+{
+    auto patch = corner->patch.lock();
+    u32 fromX, fromY, cellSize;
+    std::tie(fromX, fromY, std::ignore, std::ignore, cellSize) =
+        patch->synchronizationParameters(
+            corner->position[0], this->dimensions.unit()[0], corner->side);
+    T sum = 0;
+    for (u32 y = fromY; y < fromY + cellSize; ++y) {
+        for (u32 x = fromX; x < fromX + cellSize; ++x) {
+            sum += patch->read(x, y);
+        }
+    }
+    return sum;
 }
 
 void Patch::synchronizeEdges()
@@ -419,6 +439,24 @@ void Patch::synchronizeEdges()
     }
     for (const auto& section : this->downEdge) {
         this->synchronizeSection(section, DOWN);
+    }
+    if (this->upLeftCorner != nullptr) {
+        this->write(0, 0, this->synchronizeCorner(this->upLeftCorner));
+    }
+    if (this->downLeftCorner != nullptr) {
+        this->write(0,
+                    this->dimensions[1].nom() + 1,
+                    this->synchronizeCorner(this->downLeftCorner));
+    }
+    if (this->upRightCorner != nullptr) {
+        this->write(this->dimensions[0].nom() + 1,
+                    0,
+                    this->synchronizeCorner(this->upRightCorner));
+    }
+    if (this->downRightCorner != nullptr) {
+        this->write(this->dimensions[0].nom() + 1,
+                    this->dimensions[1].nom(),
+                    this->synchronizeCorner(this->downRightCorner));
     }
 }
 

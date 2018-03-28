@@ -24,10 +24,12 @@ struct Corner
 {
     std::weak_ptr<Patch> patch;
     frac1 position;
+    Side side;
     Corner() = default;
-    Corner(const std::weak_ptr<Patch>& patch, frac1 position)
+    Corner(const std::weak_ptr<Patch>& patch, frac1 position, Side side)
         : patch(patch)
         , position(position)
+        , side(side)
     {
     }
 };
@@ -58,6 +60,7 @@ struct Patch
     synchronizationParameters(FracRView pos, FracRView depth, Side side) const;
     T sum(frac2 pos, frac2 size) const;
     void synchronizeSection(std::shared_ptr<Section> section, Side side);
+    T synchronizeCorner(const std::shared_ptr<Corner>& corner);
     u32 fracToLength(FracRView frac) const;
     void synchronizeEdges();
     void print() const;
