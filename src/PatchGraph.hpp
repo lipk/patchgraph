@@ -34,6 +34,27 @@ struct Corner
     }
 };
 
+struct Patch;
+
+struct DataReader
+{
+    typedef double T;
+    const Patch& patch;
+    inline T read(u32 x, u32 y) const;
+};
+
+struct DataWriter
+{
+    typedef double T;
+    Patch& patch;
+    inline void write(u32 x, u32 y, T value);
+};
+
+typedef std::function<double(const DataReader&, u32, u32, u32, u32)>
+    DownsampleFunc;
+typedef std::function<void(DataWriter&, double, u32, u32, u32, u32)>
+    UpsampleFunc;
+
 struct Patch
 {
     typedef double T;
@@ -65,6 +86,16 @@ struct Patch
     void synchronizeEdges();
     void print() const;
 };
+
+DataReader::T DataReader::read(u32 x, u32 y) const
+{
+    return this->patch.read(x, y);
+}
+
+void DataWriter::write(u32 x, u32 y, DataWriter::T value)
+{
+    this->patch.write(x, y, value);
+}
 
 std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
     std::shared_ptr<Patch>&& patch,
