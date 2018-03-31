@@ -15,7 +15,7 @@ void draw_rect(SDL_Renderer* rnd, int x, int y, int w, int h)
     SDL_RenderDrawLine(rnd, x, y + h, x, y);
 }
 
-void draw_block(SDL_Renderer* rnd, const Patch& block)
+void draw_block(SDL_Renderer* rnd, const Patch<double>& block)
 {
     size_t pos_coeff = 64 >> block.position[0].denominator;
     int x = pos_coeff * block.position[0].nominator;
@@ -32,7 +32,7 @@ void draw_block(SDL_Renderer* rnd, const Patch& block)
     }
 }
 
-void splitAndFocus(std::vector<std::shared_ptr<Patch>>& blocks,
+void splitAndFocus(std::vector<std::shared_ptr<Patch<double>>>& blocks,
                    size_t which,
                    size_t where,
                    bool vertical)
@@ -45,7 +45,7 @@ void splitAndFocus(std::vector<std::shared_ptr<Patch>>& blocks,
 }
 
 void highlightCell(SDL_Renderer* rnd,
-                   const std::vector<std::shared_ptr<Patch>>& patches,
+                   const std::vector<std::shared_ptr<Patch<double>>>& patches,
                    int x,
                    int y)
 {
@@ -67,47 +67,51 @@ void highlightCell(SDL_Renderer* rnd,
 
 int main()
 {
-    std::vector<std::shared_ptr<Patch>> blocks;
-    auto bl = std::make_shared<Patch>();
-    bl->dimensions = frac2(7, 7);
+    auto downsample = [](const DataReader<double>& reader,
+                         u32 fromX,
+                         u32 fromY,
+                         u32 toX,
+                         u32 toY) -> double {
+        double sum = 0;
+        for (u32 y = fromY; y < toY; ++y) {
+            for (u32 x = fromX; x < toX; ++x) {
+                sum += reader.read(x, y);
+            }
+        }
+        return sum;
+    };
 
-    blocks.push_back(bl);
-    bl->prepareBuffer();
-    blocks[0]->print();
+    auto upsample = [](DataWriter<double>& writer,
+                       double value,
+                       u32 fromX,
+                       u32 fromY,
+                       u32 toX,
+                       u32 toY,
+                       u8 focusDiff) {
+        const double sampled = value / (focusDiff * focusDiff);
+        for (u32 y = fromY; y < toY; ++y) {
+            for (u32 x = fromX; x < toX; ++x) {
+                writer.write(x, y, sampled);
+            }
+        }
+    };
+
+    auto graph = createPatchGraph<double>(
+        7U, 7U, std::move(downsample), std::move(upsample));
+
+    graph.print();
     std::cout << "---" << std::endl;
-    splitAndFocus(blocks, 0, 3, true);
-    blocks[0]->print();
-    blocks[1]->print();
+    graph.splitAndFocus(0, 3, true, 0, 2);
+    graph.print();
     std::cout << "---" << std::endl;
-    blocks[0]->synchronizeEdges();
-    blocks[1]->synchronizeEdges();
-    blocks[0]->print();
-    blocks[1]->print();
+    graph.synchronizeEdges();
+    graph.print();
     std::cout << "---" << std::endl;
-    splitAndFocus(blocks, 0, 2, false);
-    blocks[0]->print();
-    blocks[1]->print();
-    blocks[2]->print();
+    graph.splitAndFocus(0, 2, false, 1, 0);
+    graph.print();
     std::cout << "---" << std::endl;
-    blocks[0]->synchronizeEdges();
-    blocks[1]->synchronizeEdges();
-    blocks[2]->synchronizeEdges();
-    blocks[0]->print();
-    blocks[1]->print();
-    blocks[2]->print();
-    std::cout << "---" << std::endl;
-    zoomIn(*blocks[0], 1);
-    zoomIn(*blocks[1], 2);
-    blocks[0]->print();
-    blocks[1]->print();
-    blocks[2]->print();
-    std::cout << "---" << std::endl;
-    blocks[0]->synchronizeEdges();
-    blocks[1]->synchronizeEdges();
-    blocks[2]->synchronizeEdges();
-    blocks[0]->print();
-    blocks[1]->print();
-    blocks[2]->print();
+    graph.synchronizeEdges();
+    graph.print();
     std::cout << "---" << std::endl;
     int hlx, hly;
     if (SDL_Init(SDL_INIT_VIDEO) == 0) {
@@ -124,7 +128,7 @@ int main()
                 SDL_RenderClear(renderer);
 
                 uint8_t color = 255;
-                for (auto block : blocks) {
+                for (auto block : graph.patches) {
                     SDL_SetRenderDrawColor(renderer,
                                            color,
                                            255 - color,
@@ -133,7 +137,7 @@ int main()
                     draw_block(renderer, *block);
                     color -= 64;
                 }
-                highlightCell(renderer, blocks, hlx, hly);
+                highlightCell(renderer, graph.patches, hlx, hly);
                 SDL_RenderPresent(renderer);
 
                 while (SDL_PollEvent(&event)) {

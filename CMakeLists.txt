@@ -4,12 +4,12 @@ PROJECT(PatchGraph)
 SET(CMAKE_CXX_STANDARD 11)
 
 SET(SOURCES
-    src/Main.cpp
-    src/PatchGraph.cpp)
+    src/Main.cpp)
 
 SET(HEADERS
     src/Frac.hpp
-    src/PatchGraph.hpp)
+    src/PatchGraph.hpp
+    src/PatchGraph.impl.hpp)
 
 INCLUDE(FindPkgConfig)
 

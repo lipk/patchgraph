@@ -1,8 +1,44 @@
-#include "PatchGraph.hpp"
+#pragma once
 
-static size_t splitEdge(std::vector<std::shared_ptr<Section>>& edge,
-                        frac1 where,
-                        Side side)
+#ifndef ENABLE_PATCHGRAPH_IMPL_HPP
+#error "Don't include this file directly!"
+#include "PatchGraph.hpp"
+#else
+#undef ENABLE_PATCHGRAPH_IMPL_HPP
+#endif
+
+#include <cassert>
+
+template<typename T>
+T DataReader<T>::read(u32 x, u32 y) const
+{
+    return this->patch.read(x, y);
+}
+
+template<typename T>
+void DataWriter<T>::write(u32 x, u32 y, T value)
+{
+    this->patch.write(x, y, value);
+}
+
+template<typename T>
+std::weak_ptr<Patch<T>>& Section<T>::patch(Side side)
+{
+    switch (side) {
+        case LEFT:
+        case UP:
+            return leftOrUpPatch;
+        case RIGHT:
+        case DOWN:
+            return rightOrDownPatch;
+    }
+    assert(false);
+}
+
+template<typename T>
+size_t splitEdge(std::vector<std::shared_ptr<Section<T>>>& edge,
+                 frac1 where,
+                 Side side)
 {
     if (edge.size() == 0) {
         return 0;
@@ -17,7 +53,7 @@ static size_t splitEdge(std::vector<std::shared_ptr<Section>>& edge,
                 return i;
             }
             edge[i]->length[0] = sectionLength[0] - overflow[0];
-            auto newSection = std::make_shared<Section>(*edge[i]);
+            auto newSection = std::make_shared<Section<T>>(*edge[i]);
             newSection->length[0] = frac1(0U)[0] + overflow[0];
             newSection->leftOrUpPosition[0] += sectionLength[0] - overflow[0];
             newSection->rightOrDownPosition[0] +=
@@ -38,8 +74,9 @@ static size_t splitEdge(std::vector<std::shared_ptr<Section>>& edge,
     assert(false);
 }
 
-std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
-    std::shared_ptr<Patch>&& patch,
+template<typename T>
+std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>> splitAndFocus(
+    std::shared_ptr<Patch<T>>&& patch,
     i32 where_i,
     bool vertical,
     u8 luFocus,
@@ -52,8 +89,8 @@ std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
     assert(where_i > 0);
     assert(where[0] < patch->orthogonalDimension(side));
     assert(where_i % patch->parallelDimension(side).denom() == 0);
-    auto luPatch = std::make_shared<Patch>();
-    auto rdPatch = std::make_shared<Patch>();
+    auto luPatch = std::make_shared<Patch<T>>();
+    auto rdPatch = std::make_shared<Patch<T>>();
     luPatch->dimensions = patch->dimensions;
     luPatch->orthogonalDimension(side) = where[0];
     rdPatch->dimensions = patch->dimensions;
@@ -130,31 +167,31 @@ std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
     auto luCorners = luPatch->corners(side);
     if (!rdPatch->edge(pside).empty()) {
         auto luSection = rdPatch->edge(pside)[0];
-        std::get<0>(luCorners) = std::make_shared<Corner>(
+        std::get<0>(luCorners) = std::make_shared<Corner<T>>(
             luSection->leftOrUpPatch, luSection->leftOrUpPosition, ~pside);
     }
     if (!rdPatch->edge(~pside).empty()) {
         auto rdSection = rdPatch->edge(~pside)[0];
-        std::get<1>(luCorners) = std::make_shared<Corner>(
+        std::get<1>(luCorners) = std::make_shared<Corner<T>>(
             rdSection->rightOrDownPatch, rdSection->rightOrDownPosition, pside);
     }
     auto rdCorners = rdPatch->corners(~side);
     if (!luPatch->edge(pside).empty()) {
         auto luSection = luPatch->edge(pside).back();
-        std::get<0>(rdCorners) = std::make_shared<Corner>(
+        std::get<0>(rdCorners) = std::make_shared<Corner<T>>(
             luSection->leftOrUpPatch, luSection->leftOrUpPosition, ~pside);
         std::get<0>(rdCorners)->position[0] +=
             luSection->leftOrUpPosition[0] + luPatch->dimensions.unit()[0];
     }
     if (!luPatch->edge(~pside).empty()) {
         auto rdSection = luPatch->edge(~pside)[0];
-        std::get<1>(rdCorners) = std::make_shared<Corner>(
+        std::get<1>(rdCorners) = std::make_shared<Corner<T>>(
             rdSection->rightOrDownPatch, rdSection->rightOrDownPosition, pside);
         std::get<1>(rdCorners)->position[0] +=
             rdSection->rightOrDownPosition[0] + rdPatch->dimensions.unit()[0];
     }
 
-    auto sharedEdge = std::make_shared<Section>();
+    auto sharedEdge = std::make_shared<Section<T>>();
     sharedEdge->patch(~side) = luPatch;
     sharedEdge->patch(side) = rdPatch;
     sharedEdge->length[0] = luPatch->parallelDimension(side);
@@ -165,34 +202,23 @@ std::pair<std::shared_ptr<Patch>, std::shared_ptr<Patch>> splitAndFocus(
     return { luPatch, rdPatch };
 }
 
-std::weak_ptr<Patch>& Section::patch(Side side)
+template<typename T>
+frac1::lview Section<T>::position(Side side)
 {
     switch (side) {
         case LEFT:
         case UP:
-            return leftOrUpPatch;
+            return this->leftOrUpPosition[0];
         case RIGHT:
         case DOWN:
-            return rightOrDownPatch;
+            return this->rightOrDownPosition[0];
     }
     assert(false);
 }
 
-frac1::lview Section::position(Side side)
-{
-    switch (side) {
-        case LEFT:
-        case UP:
-            return leftOrUpPosition[0];
-        case RIGHT:
-        case DOWN:
-            return rightOrDownPosition[0];
-    }
-    assert(false);
-}
-
-std::tuple<std::shared_ptr<Corner>&, std::shared_ptr<Corner>&> Patch::corners(
-    Side side)
+template<typename T>
+std::tuple<std::shared_ptr<Corner<T>>&, std::shared_ptr<Corner<T>>&>
+Patch<T>::corners(Side side)
 {
     switch (side) {
         case LEFT:
@@ -208,7 +234,8 @@ std::tuple<std::shared_ptr<Corner>&, std::shared_ptr<Corner>&> Patch::corners(
     }
 }
 
-std::vector<std::shared_ptr<Corner>>& Patch::cornersOnEdge(Side side)
+template<typename T>
+std::vector<std::shared_ptr<Corner<T>>>& Patch<T>::cornersOnEdge(Side side)
 {
     switch (side) {
         case LEFT:
@@ -223,7 +250,8 @@ std::vector<std::shared_ptr<Corner>>& Patch::cornersOnEdge(Side side)
     assert(false);
 }
 
-std::vector<std::shared_ptr<Section>>& Patch::edge(Side side)
+template<typename T>
+std::vector<std::shared_ptr<Section<T>>>& Patch<T>::edge(Side side)
 {
     switch (side) {
         case LEFT:
@@ -238,7 +266,8 @@ std::vector<std::shared_ptr<Section>>& Patch::edge(Side side)
     assert(false);
 }
 
-frac2::lview Patch::parallelDimension(Side side)
+template<typename T>
+frac2::lview Patch<T>::parallelDimension(Side side)
 {
     switch (side) {
         case UP:
@@ -251,7 +280,8 @@ frac2::lview Patch::parallelDimension(Side side)
     assert(false);
 }
 
-frac2::lview Patch::orthogonalDimension(Side side)
+template<typename T>
+frac2::lview Patch<T>::orthogonalDimension(Side side)
 {
     switch (side) {
         case UP:
@@ -264,7 +294,8 @@ frac2::lview Patch::orthogonalDimension(Side side)
     assert(false);
 }
 
-frac2::lview Patch::parallelPosition(Side side)
+template<typename T>
+frac2::lview Patch<T>::parallelPosition(Side side)
 {
     switch (side) {
         case UP:
@@ -277,7 +308,8 @@ frac2::lview Patch::parallelPosition(Side side)
     assert(false);
 }
 
-frac2::lview Patch::orthogonalPosition(Side side)
+template<typename T>
+frac2::lview Patch<T>::orthogonalPosition(Side side)
 {
     switch (side) {
         case UP:
@@ -290,28 +322,32 @@ frac2::lview Patch::orthogonalPosition(Side side)
     assert(false);
 }
 
-void Patch::prepareBuffer()
+template<typename T>
+void Patch<T>::prepareBuffer()
 {
     this->data.clear();
     this->data.resize(
         (this->dimensions[0].nom() + 2) * (this->dimensions[1].nom() + 2), 1.0);
 }
 
-Patch::T Patch::read(u32 x, u32 y) const
+template<typename T>
+T Patch<T>::read(u32 x, u32 y) const
 {
     u32 index = (this->dimensions[0].nom() + 2) * y + x;
     assert(index < this->data.size());
     return this->data[index];
 }
 
-void Patch::write(u32 x, u32 y, Patch::T value)
+template<typename T>
+void Patch<T>::write(u32 x, u32 y, T value)
 {
     u32 index = (this->dimensions[0].nom() + 2) * y + x;
     assert(index < this->data.size());
     this->data[index] = value;
 }
 
-void Patch::writeEdge(u32 i, Side side, Patch::T value)
+template<typename T>
+void Patch<T>::writeEdge(u32 i, Side side, T value)
 {
     switch (side) {
         case LEFT:
@@ -331,7 +367,8 @@ void Patch::writeEdge(u32 i, Side side, Patch::T value)
     }
 }
 
-std::tuple<u32, u32, u32, u32, u32> Patch::synchronizationParameters(
+template<typename T>
+std::tuple<u32, u32, u32, u32, u32> Patch<T>::synchronizationParameters(
     FracRView pos,
     FracRView depth,
     Side side) const
@@ -372,7 +409,8 @@ std::tuple<u32, u32, u32, u32, u32> Patch::synchronizationParameters(
     return std::make_tuple(fromX, fromY, deltaX, deltaY, cellSize);
 }
 
-u32 Patch::fracToLength(FracRView frac) const
+template<typename T>
+u32 Patch<T>::fracToLength(FracRView frac) const
 {
     u32 multiplier = 1;
     u32 divisor = 1;
@@ -384,85 +422,155 @@ u32 Patch::fracToLength(FracRView frac) const
     return frac.nom() * multiplier / divisor;
 }
 
-void Patch::synchronizeSection(std::shared_ptr<Section> section, Side side)
+template<typename T>
+template<typename DownsampleFunc, typename UpsampleFunc>
+void Patch<T>::synchronizeSection(std::shared_ptr<Section<T>> section,
+                                  Side side,
+                                  DownsampleFunc downsample,
+                                  UpsampleFunc upsample)
 {
-    auto that = section->patch(side).lock();
-    u32 fromX, fromY, deltaX, deltaY, thatCellSize;
-    std::tie(fromX, fromY, deltaX, deltaY, thatCellSize) =
-        that->synchronizationParameters(
+    auto other = section->patch(side).lock();
+    u32 otherX, otherY, otherDeltaX, otherDeltaY, otherCellSize;
+    std::tie(otherX, otherY, otherDeltaX, otherDeltaY, otherCellSize) =
+        other->synchronizationParameters(
             section->position(side), this->dimensions.unit()[0], ~side);
-    u32 thisCellSize = thatCellSize == 1U
-                           ? this->fracToLength(that->dimensions.unit()[0])
-                           : 1U;
 
-    u32 offset = 1 + this->fracToLength(section->position(~side));
+    u32 thisCellSize = otherCellSize == 1U
+                           ? this->fracToLength(other->dimensions.unit()[0])
+                           : 1U;
+    u32 thisX = 0, thisY = 0, thisDeltaX = 0, thisDeltaY = 0;
+    switch (side) {
+        case RIGHT:
+            thisX = this->dimensions[0].nom() + 1;
+        case LEFT:
+            thisY = 1 + this->fracToLength(section->position(~side));
+            thisDeltaY = thisCellSize;
+            break;
+        case DOWN:
+            thisY = this->dimensions[1].nom() + 1;
+        case UP:
+            thisX = 1 + this->fracToLength(section->position(~side));
+            thisDeltaX = thisCellSize;
+            break;
+        default:
+            assert(false);
+    }
+    u32 thisCellWidth = std::max(1U, thisDeltaX);
+    u32 thisCellHeight = std::max(1U, thisDeltaY);
+
+    DataReader<T> reader(*other);
+    DataWriter<T> writer(*this);
     for (u32 i = 0; i < this->fracToLength(section->length[0]);
          i += thisCellSize) {
-        double sum = 0.0;
-        for (u32 y = fromY; y < fromY + thatCellSize; ++y) {
-            for (u32 x = fromX; x < fromX + thatCellSize; ++x) {
-                sum += that->read(x, y);
-            }
+        if (thisCellSize < otherCellSize) {
+            this->write(thisX,
+                        thisY,
+                        downsample(reader,
+                                   otherX,
+                                   otherY,
+                                   otherX + otherCellSize,
+                                   otherY + otherCellSize));
+        } else {
+            upsample(writer,
+                     other->read(otherX, otherY),
+                     thisX,
+                     thisY,
+                     thisX + thisCellWidth,
+                     thisY + thisCellHeight,
+                     thisCellSize);
         }
-        for (u32 j = 0; j < thisCellSize; ++j) {
-            this->writeEdge(offset + i + j, side, sum);
-        }
-        fromX += deltaX;
-        fromY += deltaY;
+        thisX += thisDeltaX;
+        thisY += thisDeltaY;
+        otherX += otherDeltaX;
+        otherY += otherDeltaY;
     }
 }
 
-Patch::T Patch::synchronizeCorner(const std::shared_ptr<Corner>& corner)
+template<typename T>
+template<typename DownsampleFunc, typename UpsampleFunc>
+void Patch<T>::synchronizeCorner(const std::shared_ptr<Corner<T>>& corner,
+                                 u32 thisX,
+                                 u32 thisY,
+                                 DownsampleFunc downsample,
+                                 UpsampleFunc upsample)
 {
     auto patch = corner->patch.lock();
-    u32 fromX, fromY, cellSize;
-    std::tie(fromX, fromY, std::ignore, std::ignore, cellSize) =
+    u32 otherX, otherY, otherCellSize;
+    std::tie(otherX, otherY, std::ignore, std::ignore, otherCellSize) =
         patch->synchronizationParameters(
             corner->position[0], this->dimensions.unit()[0], corner->side);
-    T sum = 0;
-    for (u32 y = fromY; y < fromY + cellSize; ++y) {
-        for (u32 x = fromX; x < fromX + cellSize; ++x) {
-            sum += patch->read(x, y);
-        }
+
+    u32 thisCellSize = otherCellSize == 1U
+                           ? this->fracToLength(patch->dimensions.unit()[0])
+                           : 1U;
+
+    DataReader<T> reader(*patch);
+    DataWriter<T> writer(*this);
+    if (thisCellSize < otherCellSize) {
+        this->write(thisX,
+                    thisY,
+                    -downsample(reader,
+                                otherX,
+                                otherY,
+                                otherX + otherCellSize,
+                                otherY + otherCellSize));
+    } else {
+        upsample(writer,
+                 -patch->read(otherX, otherY),
+                 thisX,
+                 thisY,
+                 thisX + 1,
+                 thisY + 1,
+                 thisCellSize);
     }
-    return sum;
 }
 
-void Patch::synchronizeEdges()
+template<typename T>
+template<typename DownsampleFunc, typename UpsampleFunc>
+void Patch<T>::synchronizeEdges(DownsampleFunc downsample,
+                                UpsampleFunc upsample)
 {
     for (const auto& section : this->leftEdge) {
-        this->synchronizeSection(section, LEFT);
+        this->synchronizeSection(section, LEFT, downsample, upsample);
     }
     for (const auto& section : this->rightEdge) {
-        this->synchronizeSection(section, RIGHT);
+        this->synchronizeSection(section, RIGHT, downsample, upsample);
     }
     for (const auto& section : this->upEdge) {
-        this->synchronizeSection(section, UP);
+        this->synchronizeSection(section, UP, downsample, upsample);
     }
     for (const auto& section : this->downEdge) {
-        this->synchronizeSection(section, DOWN);
+        this->synchronizeSection(section, DOWN, downsample, upsample);
     }
     if (this->upLeftCorner != nullptr) {
-        this->write(0, 0, this->synchronizeCorner(this->upLeftCorner));
+
+        this->synchronizeCorner(this->upLeftCorner, 0, 0, downsample, upsample);
     }
     if (this->downLeftCorner != nullptr) {
-        this->write(0,
-                    this->dimensions[1].nom() + 1,
-                    this->synchronizeCorner(this->downLeftCorner));
+        this->synchronizeCorner(this->downLeftCorner,
+                                0,
+                                this->dimensions[1].nom() + 1,
+                                downsample,
+                                upsample);
     }
     if (this->upRightCorner != nullptr) {
-        this->write(this->dimensions[0].nom() + 1,
-                    0,
-                    this->synchronizeCorner(this->upRightCorner));
+        this->synchronizeCorner(this->upRightCorner,
+                                this->dimensions[0].nom() + 1,
+                                0,
+                                downsample,
+                                upsample);
     }
     if (this->downRightCorner != nullptr) {
-        this->write(this->dimensions[0].nom() + 1,
-                    this->dimensions[1].nom(),
-                    this->synchronizeCorner(this->downRightCorner));
+        this->synchronizeCorner(this->downRightCorner,
+                                this->dimensions[0].nom() + 1,
+                                this->dimensions[1].nom() + 1,
+                                downsample,
+                                upsample);
     }
 }
 
-void Patch::print() const
+template<typename T>
+void Patch<T>::print() const
 {
     for (u32 y = 0; y < this->dimensions[1].nom() + 2; ++y) {
         for (u32 x = 0; x < this->dimensions[0].nom() + 2; ++x) {
@@ -473,20 +581,53 @@ void Patch::print() const
     std::cout << std::endl;
 }
 
-void zoomIn(Patch& patch, u8 level)
+template<typename T>
+void zoomIn(Patch<T>& patch, u8 level)
 {
     patch.dimensions.focus(level);
     patch.prepareBuffer();
 }
 
-void DoublePatchGraph::synchronizeEdges()
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+PatchGraph<T, DownsampleFunc, UpsampleFunc>::PatchGraph(
+    u32 width,
+    u32 height,
+    DownsampleFunc&& downsample,
+    UpsampleFunc&& upsample)
+    : downsample(std::move(downsample))
+    , upsample(std::move(upsample))
+{
+    auto patch = std::make_shared<Patch<T>>();
+    patch->dimensions = frac2(width, height);
+    patch->prepareBuffer();
+    this->patches.push_back(std::move(patch));
+}
+
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::synchronizeEdges()
 {
     for (const auto& patch : this->patches) {
-        patch->synchronizeEdges();
+        patch->synchronizeEdges(this->downsample, this->upsample);
     }
 }
 
-void DoublePatchGraph::print() const
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::splitAndFocus(size_t which,
+                                                                size_t where,
+                                                                bool vertical,
+                                                                u8 luFocus,
+                                                                u8 rdFocus)
+{
+    auto patch = this->patches[which];
+    this->patches.erase(this->patches.begin() + which);
+    auto newPatches =
+        ::splitAndFocus(std::move(patch), where, vertical, luFocus, rdFocus);
+    this->patches.push_back(std::move(newPatches.first));
+    this->patches.push_back(std::move(newPatches.second));
+}
+
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::print() const
 {
     for (const auto& patch : this->patches) {
         patch->print();
