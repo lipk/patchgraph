@@ -32,18 +32,6 @@ void draw_block(SDL_Renderer* rnd, const Patch<double>& block)
     }
 }
 
-void splitAndFocus(std::vector<std::shared_ptr<Patch<double>>>& blocks,
-                   size_t which,
-                   size_t where,
-                   bool vertical)
-{
-    auto bl = blocks[which];
-    blocks.erase(blocks.begin() + which);
-    auto nbl = splitAndFocus(std::move(bl), where, vertical, 0, 0);
-    blocks.push_back(nbl.first);
-    blocks.push_back(nbl.second);
-}
-
 void highlightCell(SDL_Renderer* rnd,
                    const std::vector<std::shared_ptr<Patch<double>>>& patches,
                    int x,
