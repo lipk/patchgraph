@@ -87,6 +87,12 @@ int main()
     auto graph = createPatchGraph<double>(
         7U, 7U, std::move(downsample), std::move(upsample));
 
+    for (size_t y = 0; y < 7U; ++y) {
+        for (size_t x = 0; x < 7U; ++x) {
+            graph.write(x, y, 1);
+        }
+    }
+
     graph.print();
     std::cout << "---" << std::endl;
     graph.splitAndFocus(0, 3, true, 0, 2);
@@ -95,7 +101,7 @@ int main()
     graph.synchronizeEdges();
     graph.print();
     std::cout << "---" << std::endl;
-    graph.splitAndFocus(0, 2, false, 1, 0);
+    graph.splitAndFocus(0, 2, false, 0, 3);
     graph.print();
     std::cout << "---" << std::endl;
     graph.synchronizeEdges();
@@ -116,7 +122,7 @@ int main()
                 SDL_RenderClear(renderer);
 
                 uint8_t color = 255;
-                for (auto block : graph.patches) {
+                for (auto block : graph.patches1) {
                     SDL_SetRenderDrawColor(renderer,
                                            color,
                                            255 - color,
@@ -125,7 +131,7 @@ int main()
                     draw_block(renderer, *block);
                     color -= 64;
                 }
-                highlightCell(renderer, graph.patches, hlx, hly);
+                highlightCell(renderer, graph.patches1, hlx, hly);
                 SDL_RenderPresent(renderer);
 
                 while (SDL_PollEvent(&event)) {

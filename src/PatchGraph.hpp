@@ -78,13 +78,13 @@ struct Patch
     frac2::lview orthogonalDimension(Side side);
     frac2::lview parallelPosition(Side side);
     frac2::lview orthogonalPosition(Side side);
-    void prepareBuffer();
+
     T read(u32 x, u32 y) const;
     void write(u32 x, u32 y, T value);
     void writeEdge(u32 i, Side side, T value);
+
     std::tuple<u32, u32, u32, u32, u32>
     synchronizationParameters(FracRView pos, FracRView depth, Side side) const;
-
     template<typename DownsampleFunc, typename UpsampleFunc>
     void synchronizeSection(std::shared_ptr<Section<T>> section,
                             Side side,
@@ -98,6 +98,9 @@ struct Patch
                            UpsampleFunc upsample);
     template<typename DownsampleFunc, typename UpsampleFunc>
     void synchronizeEdges(DownsampleFunc downsample, UpsampleFunc upsample);
+
+    template<typename UpsampleFunc>
+    void focus(u8 level, UpsampleFunc upsample);
 
     u32 fracToLength(FracRView frac) const;
     void print() const;
@@ -116,17 +119,32 @@ struct PatchGraph
 {
     DownsampleFunc downsample;
     UpsampleFunc upsample;
-    std::vector<std::shared_ptr<Patch<T>>> patches;
+    std::vector<std::shared_ptr<Patch<T>>> patches1, patches2;
+    std::vector<std::shared_ptr<Patch<T>>>*source, *target;
     PatchGraph(u32 width,
                u32 height,
                DownsampleFunc&& downsample,
                UpsampleFunc&& upsample);
     void synchronizeEdges();
+    std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>>
+    splitAndFocus(std::shared_ptr<Patch<T>> patch,
+                  size_t where_,
+                  bool vertical,
+                  u8 luFocus,
+                  u8 rdFocus);
     void splitAndFocus(size_t which,
                        size_t where_,
                        bool vertical,
                        u8 luFocus,
                        u8 rdFocus);
+
+    std::tuple<std::shared_ptr<Patch<T>>, u32, u32> find(u32 x, u32 y) const;
+    void write(u32 x, u32 y, T value);
+    T read(u32 x, u32 y) const;
+
+    template<typename StencilFunc>
+    void apply(StencilFunc func, size_t times);
+
     void print() const;
 };
 
@@ -140,9 +158,6 @@ PatchGraph<T, DownsampleFunc, UpsampleFunc> createPatchGraph(
     return PatchGraph<T, DownsampleFunc, UpsampleFunc>(
         width, height, std::move(downsample), std::move(upsample));
 }
-
-template<typename T>
-void zoomIn(Patch<T>& patch, u8 level);
 
 #define ENABLE_PATCHGRAPH_IMPL_HPP
 #include "PatchGraph.impl.hpp"
