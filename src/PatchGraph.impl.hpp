@@ -36,173 +36,6 @@ std::weak_ptr<Patch<T>>& Section<T>::patch(Side side)
 }
 
 template<typename T>
-size_t splitEdge(std::vector<std::shared_ptr<Section<T>>>& edge,
-                 frac1 where,
-                 Side side)
-{
-    if (edge.size() == 0) {
-        return 0;
-    }
-    frac1 length({ 0 });
-    for (size_t i = 0; i < edge.size(); ++i) {
-        frac1 sectionLength = edge[i]->length;
-        if (length[0] + sectionLength[0] > where[0]) {
-            frac1 overflow;
-            overflow[0] = length[0] + sectionLength[0] - where[0];
-            if (overflow[0] == sectionLength[0]) {
-                return i;
-            }
-            edge[i]->length[0] = sectionLength[0] - overflow[0];
-            auto newSection = std::make_shared<Section<T>>(*edge[i]);
-            newSection->length[0] = frac1(0U)[0] + overflow[0];
-            newSection->leftOrUpPosition[0] += sectionLength[0] - overflow[0];
-            newSection->rightOrDownPosition[0] +=
-                sectionLength[0] - overflow[0];
-            edge.insert(edge.begin() + i + 1, newSection);
-            auto otherPatch = edge[i]->patch(side);
-            auto& otherEdge = otherPatch.lock()->edge(~side);
-            for (size_t j = 0; j < otherEdge.size(); ++j) {
-                if (otherEdge[j] == edge[i]) {
-                    otherEdge.insert(otherEdge.begin() + j + 1,
-                                     std::move(newSection));
-                    return i + 1;
-                }
-            }
-            assert(false);
-        }
-    }
-    assert(false);
-}
-
-template<typename T>
-std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>> splitAndFocus(
-    std::shared_ptr<Patch<T>>&& patch,
-    i32 where_i,
-    bool vertical,
-    u8 luFocus,
-    u8 rdFocus)
-{
-    Side side = vertical ? RIGHT : DOWN;
-    Side pside = vertical ? UP : LEFT;
-    frac1 where;
-    where[0] = patch->dimensions.unit()[0] * where_i;
-    assert(where_i > 0);
-    assert(where[0] < patch->orthogonalDimension(side));
-    assert(where_i % patch->parallelDimension(side).denom() == 0);
-    auto luPatch = std::make_shared<Patch<T>>();
-    auto rdPatch = std::make_shared<Patch<T>>();
-    luPatch->dimensions = patch->dimensions;
-    luPatch->orthogonalDimension(side) = where[0];
-    rdPatch->dimensions = patch->dimensions;
-    rdPatch->orthogonalDimension(side) =
-        patch->orthogonalDimension(side) - where[0];
-    luPatch->position = patch->position;
-    rdPatch->position = patch->position;
-    rdPatch->orthogonalPosition(side) += where[0];
-    luPatch->corners(~side) = patch->corners(~side);
-    rdPatch->corners(side) = patch->corners(side);
-    luPatch->cornersOnEdge(~side) = std::move(patch->cornersOnEdge(~side));
-    for (auto& corner : luPatch->cornersOnEdge(~side)) {
-        corner->patch = luPatch;
-    }
-    rdPatch->cornersOnEdge(side) = std::move(patch->cornersOnEdge(side));
-    for (auto& corner : rdPatch->cornersOnEdge(side)) {
-        corner->patch = rdPatch;
-    }
-
-    for (const auto& section : patch->edge(side)) {
-        section->patch(side) = rdPatch;
-        section->patch(~side) = luPatch;
-    }
-
-    size_t luSplitEdge = splitEdge(patch->edge(pside), where, pside);
-    luPatch->edge(pside).assign(patch->edge(pside).begin(),
-                                patch->edge(pside).begin() + luSplitEdge);
-    rdPatch->edge(pside).assign(patch->edge(pside).begin() + luSplitEdge,
-                                patch->edge(pside).end());
-    for (auto& corner : patch->cornersOnEdge(pside)) {
-        if (corner->position[0] < luPatch->parallelDimension(pside)) {
-            corner->patch = luPatch;
-            luPatch->cornersOnEdge(pside).push_back(std::move(corner));
-        } else {
-            corner->position[0] -= luPatch->parallelDimension(pside);
-            corner->patch = rdPatch;
-            rdPatch->cornersOnEdge(pside).push_back(std::move(corner));
-        }
-    }
-    for (auto& corner : patch->cornersOnEdge(~pside)) {
-        if (corner->position[0] < luPatch->parallelDimension(~pside)) {
-            corner->patch = luPatch;
-            luPatch->cornersOnEdge(~pside).push_back(std::move(corner));
-        } else {
-            corner->position[0] -= luPatch->parallelDimension(~pside);
-            corner->patch = rdPatch;
-            rdPatch->cornersOnEdge(~pside).push_back(std::move(corner));
-        }
-    }
-    for (auto& section : luPatch->edge(pside)) {
-        section->rightOrDownPatch = luPatch;
-    }
-    frac1 nearSideOffset;
-    for (auto& section : rdPatch->edge(pside)) {
-        section->rightOrDownPosition = nearSideOffset;
-        section->rightOrDownPatch = rdPatch;
-        nearSideOffset[0] += section->length[0];
-    }
-    size_t rdSplitEdge = splitEdge(patch->edge(~pside), where, ~pside);
-    luPatch->edge(~pside).assign(patch->edge(~pside).begin(),
-                                 patch->edge(~pside).begin() + rdSplitEdge);
-    rdPatch->edge(~pside).assign(patch->edge(~pside).begin() + rdSplitEdge,
-                                 patch->edge(~pside).end());
-    for (auto& section : luPatch->edge(~pside)) {
-        section->leftOrUpPatch = luPatch;
-    }
-    frac1 farSideOffset;
-    for (auto& section : rdPatch->edge(~pside)) {
-        section->leftOrUpPosition = farSideOffset;
-        section->leftOrUpPatch = rdPatch;
-        farSideOffset[0] += section->length[0];
-    }
-
-    auto luCorners = luPatch->corners(side);
-    if (!rdPatch->edge(pside).empty()) {
-        auto luSection = rdPatch->edge(pside)[0];
-        std::get<0>(luCorners) = std::make_shared<Corner<T>>(
-            luSection->leftOrUpPatch, luSection->leftOrUpPosition, ~pside);
-    }
-    if (!rdPatch->edge(~pside).empty()) {
-        auto rdSection = rdPatch->edge(~pside)[0];
-        std::get<1>(luCorners) = std::make_shared<Corner<T>>(
-            rdSection->rightOrDownPatch, rdSection->rightOrDownPosition, pside);
-    }
-    auto rdCorners = rdPatch->corners(~side);
-    if (!luPatch->edge(pside).empty()) {
-        auto luSection = luPatch->edge(pside).back();
-        std::get<0>(rdCorners) = std::make_shared<Corner<T>>(
-            luSection->leftOrUpPatch, luSection->leftOrUpPosition, ~pside);
-        std::get<0>(rdCorners)->position[0] +=
-            luSection->leftOrUpPosition[0] + luPatch->dimensions.unit()[0];
-    }
-    if (!luPatch->edge(~pside).empty()) {
-        auto rdSection = luPatch->edge(~pside)[0];
-        std::get<1>(rdCorners) = std::make_shared<Corner<T>>(
-            rdSection->rightOrDownPatch, rdSection->rightOrDownPosition, pside);
-        std::get<1>(rdCorners)->position[0] +=
-            rdSection->rightOrDownPosition[0] + rdPatch->dimensions.unit()[0];
-    }
-
-    auto sharedEdge = std::make_shared<Section<T>>();
-    sharedEdge->patch(~side) = luPatch;
-    sharedEdge->patch(side) = rdPatch;
-    sharedEdge->length[0] = luPatch->parallelDimension(side);
-    luPatch->edge(side).push_back(sharedEdge);
-    rdPatch->edge(~side).push_back(sharedEdge);
-    zoomIn(*luPatch, luFocus);
-    zoomIn(*rdPatch, rdFocus);
-    return { luPatch, rdPatch };
-}
-
-template<typename T>
 frac1::lview Section<T>::position(Side side)
 {
     switch (side) {
@@ -509,14 +342,14 @@ void Patch<T>::synchronizeCorner(const std::shared_ptr<Corner<T>>& corner,
     if (thisCellSize < otherCellSize) {
         this->write(thisX,
                     thisY,
-                    -downsample(reader,
-                                otherX,
-                                otherY,
-                                otherX + otherCellSize,
-                                otherY + otherCellSize));
+                    downsample(reader,
+                               otherX,
+                               otherY,
+                               otherX + otherCellSize,
+                               otherY + otherCellSize));
     } else {
         upsample(writer,
-                 -patch->read(otherX, otherY),
+                 patch->read(otherX, otherY),
                  thisX,
                  thisY,
                  thisX + 1,
@@ -611,19 +444,174 @@ void PatchGraph<T, DownsampleFunc, UpsampleFunc>::synchronizeEdges()
     }
 }
 
+template<typename T>
+size_t splitEdge(std::vector<std::shared_ptr<Section<T>>>& edge,
+                 frac1 where,
+                 Side side)
+{
+    if (edge.size() == 0) {
+        return 0;
+    }
+    frac1 length({ 0 });
+    for (size_t i = 0; i < edge.size(); ++i) {
+        frac1 sectionLength = edge[i]->length;
+        if (length[0] + sectionLength[0] > where[0]) {
+            frac1 overflow;
+            overflow[0] = length[0] + sectionLength[0] - where[0];
+            if (overflow[0] == sectionLength[0]) {
+                return i;
+            }
+            edge[i]->length[0] = sectionLength[0] - overflow[0];
+            auto newSection = std::make_shared<Section<T>>(*edge[i]);
+            newSection->length[0] = frac1(0U)[0] + overflow[0];
+            newSection->leftOrUpPosition[0] += sectionLength[0] - overflow[0];
+            newSection->rightOrDownPosition[0] +=
+                sectionLength[0] - overflow[0];
+            edge.insert(edge.begin() + i + 1, newSection);
+            auto otherPatch = edge[i]->patch(side);
+            auto& otherEdge = otherPatch.lock()->edge(~side);
+            for (size_t j = 0; j < otherEdge.size(); ++j) {
+                if (otherEdge[j] == edge[i]) {
+                    otherEdge.insert(otherEdge.begin() + j + 1,
+                                     std::move(newSection));
+                    return i + 1;
+                }
+            }
+            assert(false);
+        }
+    }
+    assert(false);
+}
+
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 void PatchGraph<T, DownsampleFunc, UpsampleFunc>::splitAndFocus(size_t which,
-                                                                size_t where,
+                                                                size_t where_,
                                                                 bool vertical,
                                                                 u8 luFocus,
                                                                 u8 rdFocus)
 {
     auto patch = this->patches[which];
     this->patches.erase(this->patches.begin() + which);
-    auto newPatches =
-        ::splitAndFocus(std::move(patch), where, vertical, luFocus, rdFocus);
-    this->patches.push_back(std::move(newPatches.first));
-    this->patches.push_back(std::move(newPatches.second));
+
+    Side side = vertical ? RIGHT : DOWN;
+    Side pside = vertical ? UP : LEFT;
+    frac1 where;
+    where[0] = patch->dimensions.unit()[0] * where_;
+    assert(where_ > 0);
+    assert(where[0] < patch->orthogonalDimension(side));
+    assert(where_ % patch->parallelDimension(side).denom() == 0);
+    auto luPatch = std::make_shared<Patch<T>>();
+    auto rdPatch = std::make_shared<Patch<T>>();
+    luPatch->dimensions = patch->dimensions;
+    luPatch->orthogonalDimension(side) = where[0];
+    rdPatch->dimensions = patch->dimensions;
+    rdPatch->orthogonalDimension(side) =
+        patch->orthogonalDimension(side) - where[0];
+    luPatch->position = patch->position;
+    rdPatch->position = patch->position;
+    rdPatch->orthogonalPosition(side) += where[0];
+    luPatch->corners(~side) = patch->corners(~side);
+    rdPatch->corners(side) = patch->corners(side);
+    luPatch->cornersOnEdge(~side) = std::move(patch->cornersOnEdge(~side));
+    for (auto& corner : luPatch->cornersOnEdge(~side)) {
+        corner->patch = luPatch;
+    }
+    rdPatch->cornersOnEdge(side) = std::move(patch->cornersOnEdge(side));
+    for (auto& corner : rdPatch->cornersOnEdge(side)) {
+        corner->patch = rdPatch;
+    }
+
+    for (const auto& section : patch->edge(side)) {
+        section->patch(side) = rdPatch;
+        section->patch(~side) = luPatch;
+    }
+
+    size_t luSplitEdge = splitEdge(patch->edge(pside), where, pside);
+    luPatch->edge(pside).assign(patch->edge(pside).begin(),
+                                patch->edge(pside).begin() + luSplitEdge);
+    rdPatch->edge(pside).assign(patch->edge(pside).begin() + luSplitEdge,
+                                patch->edge(pside).end());
+    for (auto& corner : patch->cornersOnEdge(pside)) {
+        if (corner->position[0] < luPatch->parallelDimension(pside)) {
+            corner->patch = luPatch;
+            luPatch->cornersOnEdge(pside).push_back(std::move(corner));
+        } else {
+            corner->position[0] -= luPatch->parallelDimension(pside);
+            corner->patch = rdPatch;
+            rdPatch->cornersOnEdge(pside).push_back(std::move(corner));
+        }
+    }
+    for (auto& corner : patch->cornersOnEdge(~pside)) {
+        if (corner->position[0] < luPatch->parallelDimension(~pside)) {
+            corner->patch = luPatch;
+            luPatch->cornersOnEdge(~pside).push_back(std::move(corner));
+        } else {
+            corner->position[0] -= luPatch->parallelDimension(~pside);
+            corner->patch = rdPatch;
+            rdPatch->cornersOnEdge(~pside).push_back(std::move(corner));
+        }
+    }
+    for (auto& section : luPatch->edge(pside)) {
+        section->rightOrDownPatch = luPatch;
+    }
+    frac1 nearSideOffset;
+    for (auto& section : rdPatch->edge(pside)) {
+        section->rightOrDownPosition = nearSideOffset;
+        section->rightOrDownPatch = rdPatch;
+        nearSideOffset[0] += section->length[0];
+    }
+    size_t rdSplitEdge = splitEdge(patch->edge(~pside), where, ~pside);
+    luPatch->edge(~pside).assign(patch->edge(~pside).begin(),
+                                 patch->edge(~pside).begin() + rdSplitEdge);
+    rdPatch->edge(~pside).assign(patch->edge(~pside).begin() + rdSplitEdge,
+                                 patch->edge(~pside).end());
+    for (auto& section : luPatch->edge(~pside)) {
+        section->leftOrUpPatch = luPatch;
+    }
+    frac1 farSideOffset;
+    for (auto& section : rdPatch->edge(~pside)) {
+        section->leftOrUpPosition = farSideOffset;
+        section->leftOrUpPatch = rdPatch;
+        farSideOffset[0] += section->length[0];
+    }
+
+    auto luCorners = luPatch->corners(side);
+    if (!rdPatch->edge(pside).empty()) {
+        auto luSection = rdPatch->edge(pside)[0];
+        std::get<0>(luCorners) = std::make_shared<Corner<T>>(
+            luSection->leftOrUpPatch, luSection->leftOrUpPosition, ~pside);
+    }
+    if (!rdPatch->edge(~pside).empty()) {
+        auto rdSection = rdPatch->edge(~pside)[0];
+        std::get<1>(luCorners) = std::make_shared<Corner<T>>(
+            rdSection->rightOrDownPatch, rdSection->rightOrDownPosition, pside);
+    }
+    auto rdCorners = rdPatch->corners(~side);
+    if (!luPatch->edge(pside).empty()) {
+        auto luSection = luPatch->edge(pside).back();
+        std::get<0>(rdCorners) = std::make_shared<Corner<T>>(
+            luSection->leftOrUpPatch, luSection->leftOrUpPosition, ~pside);
+        std::get<0>(rdCorners)->position[0] +=
+            luSection->leftOrUpPosition[0] + luPatch->dimensions.unit()[0];
+    }
+    if (!luPatch->edge(~pside).empty()) {
+        auto rdSection = luPatch->edge(~pside)[0];
+        std::get<1>(rdCorners) = std::make_shared<Corner<T>>(
+            rdSection->rightOrDownPatch, rdSection->rightOrDownPosition, pside);
+        std::get<1>(rdCorners)->position[0] +=
+            rdSection->rightOrDownPosition[0] + rdPatch->dimensions.unit()[0];
+    }
+
+    auto sharedEdge = std::make_shared<Section<T>>();
+    sharedEdge->patch(~side) = luPatch;
+    sharedEdge->patch(side) = rdPatch;
+    sharedEdge->length[0] = luPatch->parallelDimension(side);
+    luPatch->edge(side).push_back(sharedEdge);
+    rdPatch->edge(~side).push_back(sharedEdge);
+    zoomIn(*luPatch, luFocus);
+    zoomIn(*rdPatch, rdFocus);
+    this->patches.push_back(std::move(luPatch));
+    this->patches.push_back(std::move(rdPatch));
 }
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>

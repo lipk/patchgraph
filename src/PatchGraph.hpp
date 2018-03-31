@@ -123,7 +123,7 @@ struct PatchGraph
                UpsampleFunc&& upsample);
     void synchronizeEdges();
     void splitAndFocus(size_t which,
-                       size_t where,
+                       size_t where_,
                        bool vertical,
                        u8 luFocus,
                        u8 rdFocus);
