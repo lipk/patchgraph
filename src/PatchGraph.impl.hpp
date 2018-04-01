@@ -541,7 +541,7 @@ PatchGraph<T, DownsampleFunc, UpsampleFunc>::splitAndFocus(
     frac1 where;
     where[0] = patch->dimensions.unit()[0] * where_;
     assert(where_ > 0);
-    assert(where[0] < patch->orthogonalDimension(parside));
+    assert(where_ < patch->orthogonalDimension(parside).nom());
     assert(where_ % patch->parallelDimension(parside).denom() == 0);
     auto luPatch = std::make_shared<Patch<T>>();
     auto rdPatch = std::make_shared<Patch<T>>();
@@ -751,23 +751,112 @@ T PatchGraph<T, DownsampleFunc, UpsampleFunc>::read(u32 x, u32 y) const
 }
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::focusAtPoints(
+    size_t patchIndex,
+    const std::vector<std::pair<u32, u32>>& points,
+    std::vector<std::shared_ptr<Patch<T>>>& newSourcePatches,
+    std::vector<std::shared_ptr<Patch<T>>>& newTargetPatches)
+{
+    assert(!points.empty());
+    auto sourcePatch = (*this->source)[patchIndex];
+    this->source->erase(this->source->begin() + patchIndex);
+    auto targetPatch = (*this->target)[patchIndex];
+    this->target->erase(this->target->begin() + patchIndex);
+    const u32 width = sourcePatch->dimensions.nom(0);
+    const u32 height = targetPatch->dimensions.nom(0);
+
+    // TODO: better algorithm
+    u32 xmin = width, xmax = 0, ymin = height, ymax = 0;
+    for (auto point : points) {
+        xmin = std::min(xmin, point.first);
+        xmax = std::max(xmax, point.first + 1);
+        ymin = std::min(ymin, point.second);
+        ymax = std::max(ymax, point.second + 1);
+    }
+
+    u32 denom = sourcePatch->dimensions.denom();
+    xmin = xmin / denom * denom;
+    ymin = ymin / denom * denom;
+    xmax = xmax % denom == 0 ? xmax : (xmax / denom + 1) * denom;
+    xmax = ymax % denom == 0 ? ymax : (ymax / denom + 1) * denom;
+
+    auto doSplit = [&](std::shared_ptr<Patch<T>>&& patch,
+                       std::vector<std::shared_ptr<Patch<T>>>& patchList) {
+        std::shared_ptr<Patch<T>> luPatch, rdPatch;
+        if (xmax < width) {
+            std::tie(luPatch, rdPatch) =
+                this->splitAndFocus(std::move(patch), xmax, true, 0, 0);
+            patchList.push_back(std::move(rdPatch));
+        } else {
+            luPatch = std::move(patch);
+        }
+        if (xmin > 0) {
+            std::tie(luPatch, rdPatch) =
+                this->splitAndFocus(std::move(luPatch), xmin, true, 0, 0);
+            patchList.push_back(std::move(luPatch));
+        } else {
+            rdPatch = std::move(luPatch);
+        }
+        if (ymax < height) {
+            std::tie(luPatch, rdPatch) =
+                this->splitAndFocus(std::move(rdPatch), ymax, false, 0, 0);
+            patchList.push_back(std::move(rdPatch));
+        } else {
+            luPatch = std::move(rdPatch);
+        }
+        if (ymin > 0) {
+            std::tie(luPatch, rdPatch) =
+                this->splitAndFocus(std::move(luPatch), ymin, false, 0, 1);
+            patchList.push_back(std::move(luPatch));
+            patchList.push_back(std::move(rdPatch));
+        } else {
+            luPatch->focus(1, this->upsample);
+            patchList.push_back(std::move(luPatch));
+        }
+    };
+
+    doSplit(std::move(sourcePatch), newSourcePatches);
+    doSplit(std::move(targetPatch), newTargetPatches);
+}
+
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 template<typename StencilFunc>
-void PatchGraph<T, DownsampleFunc, UpsampleFunc>::apply(StencilFunc func,
-                                                        size_t times)
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::apply(size_t times,
+                                                        StencilFunc func)
 {
     assert(this->source->size() == this->target->size());
+    std::vector<std::pair<u32, u32>> focusPoints;
+    std::vector<std::shared_ptr<Patch<T>>> newSourcePatches, newTargetPatches;
     for (size_t t = 0; t < times; ++t) {
         this->synchronizeEdges();
         for (size_t i = 0; i < this->source->size(); ++i) {
             auto sourcePatch = (*this->source)[i];
             auto targetPatch = (*this->target)[i];
             DataReader<T> reader(*sourcePatch);
-            for (u32 y = 1; y < sourcePatch->dimensions[1] + 1; ++y) {
-                for (u32 x = 1; x < targetPatch->dimensions[0] + 1; ++x) {
-                    targetPatch->write(x, y, func(reader, x, y, t));
+            focusPoints.clear();
+            for (u32 y = 1; y < sourcePatch->dimensions[1].nom() + 1; ++y) {
+                for (u32 x = 1; x < targetPatch->dimensions[0].nom() + 1; ++x) {
+                    bool focusHere = false;
+                    targetPatch->write(x, y, func(reader, focusHere, x, y, t));
+                    if (focusHere) {
+                        focusPoints.emplace_back(x - 1, y - 1);
+                    }
                 }
             }
+            if (!focusPoints.empty()) {
+                this->focusAtPoints(
+                    i, focusPoints, newSourcePatches, newTargetPatches);
+                i--;
+            }
         }
+        this->source->insert(this->source->end(),
+                             newSourcePatches.begin(),
+                             newSourcePatches.end());
+        newSourcePatches.clear();
+        this->target->insert(this->target->end(),
+                             newTargetPatches.begin(),
+                             newTargetPatches.end());
+        newTargetPatches.clear();
         std::swap(this->source, this->target);
     }
 }

@@ -93,20 +93,17 @@ int main()
         }
     }
 
+    graph.apply(2,
+                [](const DataReader<double>& reader,
+                   bool& focusHere,
+                   u32 x,
+                   u32 y,
+                   size_t t) {
+                    focusHere = (x == 2 && y == 2) || (x == 6 && y == 6);
+                    return reader.read(x, y);
+                });
+
     graph.print();
-    std::cout << "---" << std::endl;
-    graph.splitAndFocus(0, 3, true, 0, 2);
-    graph.print();
-    std::cout << "---" << std::endl;
-    graph.synchronizeEdges();
-    graph.print();
-    std::cout << "---" << std::endl;
-    graph.splitAndFocus(0, 2, false, 0, 3);
-    graph.print();
-    std::cout << "---" << std::endl;
-    graph.synchronizeEdges();
-    graph.print();
-    std::cout << "---" << std::endl;
     int hlx, hly;
     if (SDL_Init(SDL_INIT_VIDEO) == 0) {
         SDL_Window* window = NULL;
@@ -122,7 +119,7 @@ int main()
                 SDL_RenderClear(renderer);
 
                 uint8_t color = 255;
-                for (auto block : graph.patches1) {
+                for (auto block : *graph.source) {
                     SDL_SetRenderDrawColor(renderer,
                                            color,
                                            255 - color,
@@ -131,7 +128,7 @@ int main()
                     draw_block(renderer, *block);
                     color -= 64;
                 }
-                highlightCell(renderer, graph.patches1, hlx, hly);
+                highlightCell(renderer, *graph.source, hlx, hly);
                 SDL_RenderPresent(renderer);
 
                 while (SDL_PollEvent(&event)) {

@@ -138,12 +138,18 @@ struct PatchGraph
                        u8 luFocus,
                        u8 rdFocus);
 
+    void focusAtPoints(
+        size_t patchIndex,
+        const std::vector<std::pair<u32, u32>>& points,
+        std::vector<std::shared_ptr<Patch<T>>>& newSourcePatches,
+        std::vector<std::shared_ptr<Patch<T>>>& newTargetPatches);
+
     std::tuple<std::shared_ptr<Patch<T>>, u32, u32> find(u32 x, u32 y) const;
     void write(u32 x, u32 y, T value);
     T read(u32 x, u32 y) const;
 
     template<typename StencilFunc>
-    void apply(StencilFunc func, size_t times);
+    void apply(size_t times, StencilFunc func);
 
     void print() const;
 };
