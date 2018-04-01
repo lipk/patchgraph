@@ -5,11 +5,27 @@
 #include <memory>
 #include <vector>
 
-typedef uint8_t Side;
-#define LEFT 0x00U
-#define RIGHT 0xFFU
-#define UP 0xF0U
-#define DOWN 0x0FU
+enum class Side
+{
+    Left,
+    Right,
+    Up,
+    Down
+};
+
+Side operator~(const Side& side)
+{
+    switch (side) {
+        case Side::Left:
+            return Side::Right;
+        case Side::Right:
+            return Side::Left;
+        case Side::Up:
+            return Side::Down;
+        case Side::Down:
+            return Side::Up;
+    }
+}
 
 template<typename T>
 struct Patch;

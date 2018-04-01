@@ -25,11 +25,11 @@ template<typename T>
 std::weak_ptr<Patch<T>>& Section<T>::patch(Side side)
 {
     switch (side) {
-        case LEFT:
-        case UP:
+        case Side::Left:
+        case Side::Up:
             return leftOrUpPatch;
-        case RIGHT:
-        case DOWN:
+        case Side::Right:
+        case Side::Down:
             return rightOrDownPatch;
     }
     assert(false);
@@ -39,11 +39,11 @@ template<typename T>
 frac1::lview Section<T>::position(Side side)
 {
     switch (side) {
-        case LEFT:
-        case UP:
+        case Side::Left:
+        case Side::Up:
             return this->leftOrUpPosition[0];
-        case RIGHT:
-        case DOWN:
+        case Side::Right:
+        case Side::Down:
             return this->rightOrDownPosition[0];
     }
     assert(false);
@@ -54,13 +54,13 @@ std::tuple<std::shared_ptr<Corner<T>>&, std::shared_ptr<Corner<T>>&>
 Patch<T>::corners(Side side)
 {
     switch (side) {
-        case LEFT:
+        case Side::Left:
             return std::tie(this->upLeftCorner, this->downLeftCorner);
-        case RIGHT:
+        case Side::Right:
             return std::tie(this->upRightCorner, this->downRightCorner);
-        case UP:
+        case Side::Up:
             return std::tie(this->upLeftCorner, this->upRightCorner);
-        case DOWN:
+        case Side::Down:
             return std::tie(this->downLeftCorner, this->downRightCorner);
         default:
             assert(false);
@@ -71,13 +71,13 @@ template<typename T>
 std::vector<std::shared_ptr<Corner<T>>>& Patch<T>::cornersOnEdge(Side side)
 {
     switch (side) {
-        case LEFT:
+        case Side::Left:
             return this->cornersOnLeftEdge;
-        case RIGHT:
+        case Side::Right:
             return this->cornersOnRightEdge;
-        case UP:
+        case Side::Up:
             return this->cornersOnUpEdge;
-        case DOWN:
+        case Side::Down:
             return this->cornersOnDownEdge;
     }
     assert(false);
@@ -87,13 +87,13 @@ template<typename T>
 std::vector<std::shared_ptr<Section<T>>>& Patch<T>::edge(Side side)
 {
     switch (side) {
-        case LEFT:
+        case Side::Left:
             return this->leftEdge;
-        case RIGHT:
+        case Side::Right:
             return this->rightEdge;
-        case UP:
+        case Side::Up:
             return this->upEdge;
-        case DOWN:
+        case Side::Down:
             return this->downEdge;
     }
     assert(false);
@@ -103,11 +103,11 @@ template<typename T>
 frac2::lview Patch<T>::parallelDimension(Side side)
 {
     switch (side) {
-        case UP:
-        case DOWN:
+        case Side::Up:
+        case Side::Down:
             return this->dimensions[0];
-        case LEFT:
-        case RIGHT:
+        case Side::Left:
+        case Side::Right:
             return this->dimensions[1];
     }
     assert(false);
@@ -117,11 +117,11 @@ template<typename T>
 frac2::lview Patch<T>::orthogonalDimension(Side side)
 {
     switch (side) {
-        case UP:
-        case DOWN:
+        case Side::Up:
+        case Side::Down:
             return this->dimensions[1];
-        case LEFT:
-        case RIGHT:
+        case Side::Left:
+        case Side::Right:
             return this->dimensions[0];
     }
     assert(false);
@@ -131,11 +131,11 @@ template<typename T>
 frac2::lview Patch<T>::parallelPosition(Side side)
 {
     switch (side) {
-        case UP:
-        case DOWN:
+        case Side::Up:
+        case Side::Down:
             return this->position[0];
-        case LEFT:
-        case RIGHT:
+        case Side::Left:
+        case Side::Right:
             return this->position[1];
     }
     assert(false);
@@ -145,11 +145,11 @@ template<typename T>
 frac2::lview Patch<T>::orthogonalPosition(Side side)
 {
     switch (side) {
-        case UP:
-        case DOWN:
+        case Side::Up:
+        case Side::Down:
             return this->position[1];
-        case LEFT:
-        case RIGHT:
+        case Side::Left:
+        case Side::Right:
             return this->position[0];
     }
     assert(false);
@@ -175,16 +175,16 @@ template<typename T>
 void Patch<T>::writeEdge(u32 i, Side side, T value)
 {
     switch (side) {
-        case LEFT:
+        case Side::Left:
             write(0, i, value);
             break;
-        case RIGHT:
+        case Side::Right:
             write(this->dimensions[0].nom() + 1, i, value);
             break;
-        case UP:
+        case Side::Up:
             write(i, 0, value);
             break;
-        case DOWN:
+        case Side::Down:
             write(i, this->dimensions[1].nom() + 1, value);
             break;
         default:
@@ -203,25 +203,25 @@ std::tuple<u32, u32, u32, u32, u32> Patch<T>::synchronizationParameters(
                        : this->fracToLength(depth);
     u32 fromX, fromY, deltaX, deltaY;
     switch (side) {
-        case LEFT:
+        case Side::Left:
             fromX = 1;
             fromY = 1 + this->fracToLength(pos);
             deltaX = 0;
             deltaY = cellSize;
             break;
-        case RIGHT:
+        case Side::Right:
             fromX = 1 + this->dimensions[0].nom() - cellSize;
             fromY = 1 + this->fracToLength(pos);
             deltaX = 0;
             deltaY = cellSize;
             break;
-        case UP:
+        case Side::Up:
             fromX = 1 + this->fracToLength(pos);
             fromY = 1;
             deltaX = cellSize;
             deltaY = 0;
             break;
-        case DOWN:
+        case Side::Down:
             fromX = 1 + this->fracToLength(pos);
             fromY = 1 + this->dimensions[1].nom() - cellSize;
             deltaX = cellSize;
@@ -265,15 +265,15 @@ void Patch<T>::synchronizeSection(std::shared_ptr<Section<T>> section,
                            : 1U;
     u32 thisX = 0, thisY = 0, thisDeltaX = 0, thisDeltaY = 0;
     switch (side) {
-        case RIGHT:
+        case Side::Right:
             thisX = this->dimensions[0].nom() + 1;
-        case LEFT:
+        case Side::Left:
             thisY = 1 + this->fracToLength(section->position(~side));
             thisDeltaY = thisCellSize;
             break;
-        case DOWN:
+        case Side::Down:
             thisY = this->dimensions[1].nom() + 1;
-        case UP:
+        case Side::Up:
             thisX = 1 + this->fracToLength(section->position(~side));
             thisDeltaX = thisCellSize;
             break;
@@ -356,16 +356,16 @@ void Patch<T>::synchronizeEdges(DownsampleFunc downsample,
                                 UpsampleFunc upsample)
 {
     for (const auto& section : this->leftEdge) {
-        this->synchronizeSection(section, LEFT, downsample, upsample);
+        this->synchronizeSection(section, Side::Left, downsample, upsample);
     }
     for (const auto& section : this->rightEdge) {
-        this->synchronizeSection(section, RIGHT, downsample, upsample);
+        this->synchronizeSection(section, Side::Right, downsample, upsample);
     }
     for (const auto& section : this->upEdge) {
-        this->synchronizeSection(section, UP, downsample, upsample);
+        this->synchronizeSection(section, Side::Up, downsample, upsample);
     }
     for (const auto& section : this->downEdge) {
-        this->synchronizeSection(section, DOWN, downsample, upsample);
+        this->synchronizeSection(section, Side::Down, downsample, upsample);
     }
     if (this->upLeftCorner != nullptr) {
 
@@ -534,9 +534,9 @@ PatchGraph<T, DownsampleFunc, UpsampleFunc>::splitAndFocus(
     u8 rdFocus)
 {
     // the side parallel with the split
-    Side parside = vertical ? RIGHT : DOWN;
+    Side parside = vertical ? Side::Right : Side::Down;
     // the side orthogonal to the split
-    Side ortside = vertical ? UP : LEFT;
+    Side ortside = vertical ? Side::Up : Side::Left;
 
     frac1 where;
     where[0] = patch->dimensions.unit()[0] * where_;
