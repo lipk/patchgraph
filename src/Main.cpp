@@ -115,7 +115,7 @@ int main()
                 SDL_RenderClear(renderer);
 
                 uint8_t color = 255;
-                for (auto block : *graph.source) {
+                for (auto block : graph.getSource()) {
                     SDL_SetRenderDrawColor(renderer,
                                            color,
                                            255 - color,
@@ -124,7 +124,7 @@ int main()
                     draw_block(renderer, *block);
                     color -= 64;
                 }
-                highlightCell(renderer, *graph.source, hlx, hly);
+                highlightCell(renderer, graph.getSource(), hlx, hly);
                 SDL_RenderPresent(renderer);
 
                 while (SDL_PollEvent(&event)) {

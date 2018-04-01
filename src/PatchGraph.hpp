@@ -115,16 +115,12 @@ std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>> splitAndFocus(
     u8 rdFocus);
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
-struct PatchGraph
+class PatchGraph
 {
     DownsampleFunc downsample;
     UpsampleFunc upsample;
     std::vector<std::shared_ptr<Patch<T>>> patches1, patches2;
     std::vector<std::shared_ptr<Patch<T>>>*source, *target;
-    PatchGraph(u32 width,
-               u32 height,
-               DownsampleFunc&& downsample,
-               UpsampleFunc&& upsample);
     void synchronizeEdges();
     std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>>
     splitAndFocus(std::shared_ptr<Patch<T>> patch,
@@ -145,11 +141,24 @@ struct PatchGraph
         std::vector<std::shared_ptr<Patch<T>>>& newTargetPatches);
 
     std::tuple<std::shared_ptr<Patch<T>>, u32, u32> find(u32 x, u32 y) const;
+
+  public:
+    PatchGraph(u32 width,
+               u32 height,
+               DownsampleFunc&& downsample,
+               UpsampleFunc&& upsample);
+
     void write(u32 x, u32 y, T value);
     T read(u32 x, u32 y) const;
 
     template<typename StencilFunc>
     void apply(size_t times, StencilFunc func);
+
+    // TODO: remove this
+    const std::vector<std::shared_ptr<Patch<T>>>& getSource() const
+    {
+        return *this->source;
+    }
 
     void print() const;
 };
