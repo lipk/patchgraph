@@ -837,7 +837,7 @@ void PatchGraph<T, DownsampleFunc, UpsampleFunc>::apply(size_t times,
             for (u32 y = 1; y < sourcePatch->dimensions[1].nom() + 1; ++y) {
                 for (u32 x = 1; x < targetPatch->dimensions[0].nom() + 1; ++x) {
                     bool focusHere = false;
-                    targetPatch->write(x, y, func(reader, focusHere, x, y, t));
+                    targetPatch->write(x, y, func(reader, focusHere, x, y));
                     if (focusHere) {
                         focusPoints.emplace_back(x - 1, y - 1);
                     }

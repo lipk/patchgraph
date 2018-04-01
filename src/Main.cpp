@@ -93,15 +93,11 @@ int main()
         }
     }
 
-    graph.apply(2,
-                [](const DataReader<double>& reader,
-                   bool& focusHere,
-                   u32 x,
-                   u32 y,
-                   size_t t) {
-                    focusHere = (x == 2 && y == 2) || (x == 6 && y == 6);
-                    return reader.read(x, y);
-                });
+    graph.apply(
+        2, [](const DataReader<double>& reader, bool& focusHere, u32 x, u32 y) {
+            focusHere = (x == 2 && y == 2) || (x == 6 && y == 6);
+            return reader.read(x, y);
+        });
 
     graph.print();
     int hlx, hly;
