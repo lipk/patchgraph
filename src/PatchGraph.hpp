@@ -139,16 +139,8 @@ class PatchGraph
     std::vector<std::shared_ptr<Patch<T>>>*source, *target;
     void synchronizeEdges();
     std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>>
-    splitAndFocus(std::shared_ptr<Patch<T>> patch,
-                  size_t where_,
-                  bool vertical,
-                  u8 luFocus,
-                  u8 rdFocus);
-    void splitAndFocus(size_t which,
-                       size_t where_,
-                       bool vertical,
-                       u8 luFocus,
-                       u8 rdFocus);
+    split(std::shared_ptr<Patch<T>> patch, size_t where_, bool vertical);
+    void split(size_t which, size_t where_, bool vertical);
 
     void focusAtPoints(
         size_t patchIndex,

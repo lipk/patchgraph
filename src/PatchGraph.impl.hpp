@@ -503,35 +503,29 @@ size_t splitEdge(std::vector<std::shared_ptr<Section<T>>>& edge,
 }
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
-void PatchGraph<T, DownsampleFunc, UpsampleFunc>::splitAndFocus(size_t which,
-                                                                size_t where_,
-                                                                bool vertical,
-                                                                u8 luFocus,
-                                                                u8 rdFocus)
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::split(size_t which,
+                                                        size_t where_,
+                                                        bool vertical)
 {
     auto patch1 = this->patches1[which];
     this->patches1.erase(this->patches1.begin() + which);
-    auto newPatches1 = this->splitAndFocus(
-        std::move(patch1), where_, vertical, luFocus, rdFocus);
+    auto newPatches1 = this->split(std::move(patch1), where_, vertical);
     this->patches1.push_back(std::move(newPatches1.first));
     this->patches1.push_back(std::move(newPatches1.second));
 
     auto patch2 = this->patches2[which];
     this->patches2.erase(this->patches2.begin() + which);
-    auto newPatches2 = this->splitAndFocus(
-        std::move(patch2), where_, vertical, luFocus, rdFocus);
+    auto newPatches2 = this->split(std::move(patch2), where_, vertical);
     this->patches2.push_back(std::move(newPatches2.first));
     this->patches2.push_back(std::move(newPatches2.second));
 }
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>>
-PatchGraph<T, DownsampleFunc, UpsampleFunc>::splitAndFocus(
+PatchGraph<T, DownsampleFunc, UpsampleFunc>::split(
     std::shared_ptr<Patch<T>> patch,
     size_t where_,
-    bool vertical,
-    u8 luFocus,
-    u8 rdFocus)
+    bool vertical)
 {
     // the side parallel with the split
     Side parside = vertical ? Side::Right : Side::Down;
@@ -692,10 +686,6 @@ PatchGraph<T, DownsampleFunc, UpsampleFunc>::splitAndFocus(
     luPatch->edge(parside).push_back(sharedEdge);
     rdPatch->edge(~parside).push_back(sharedEdge);
 
-    // focus if needed
-    luPatch->focus(luFocus, this->upsample);
-    rdPatch->focus(rdFocus, this->upsample);
-
     return { std::move(luPatch), std::move(rdPatch) };
 }
 
@@ -785,28 +775,29 @@ void PatchGraph<T, DownsampleFunc, UpsampleFunc>::focusAtPoints(
         std::shared_ptr<Patch<T>> luPatch, rdPatch;
         if (xmax < width) {
             std::tie(luPatch, rdPatch) =
-                this->splitAndFocus(std::move(patch), xmax, true, 0, 0);
+                this->split(std::move(patch), xmax, true);
             patchList.push_back(std::move(rdPatch));
         } else {
             luPatch = std::move(patch);
         }
         if (xmin > 0) {
             std::tie(luPatch, rdPatch) =
-                this->splitAndFocus(std::move(luPatch), xmin, true, 0, 0);
+                this->split(std::move(luPatch), xmin, true);
             patchList.push_back(std::move(luPatch));
         } else {
             rdPatch = std::move(luPatch);
         }
         if (ymax < height) {
             std::tie(luPatch, rdPatch) =
-                this->splitAndFocus(std::move(rdPatch), ymax, false, 0, 0);
+                this->split(std::move(rdPatch), ymax, false);
             patchList.push_back(std::move(rdPatch));
         } else {
             luPatch = std::move(rdPatch);
         }
         if (ymin > 0) {
             std::tie(luPatch, rdPatch) =
-                this->splitAndFocus(std::move(luPatch), ymin, false, 0, 1);
+                this->split(std::move(luPatch), ymin, false);
+            rdPatch->focus(1, this->upsample);
             patchList.push_back(std::move(luPatch));
             patchList.push_back(std::move(rdPatch));
         } else {
