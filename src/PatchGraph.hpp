@@ -118,6 +118,9 @@ struct Patch
     template<typename UpsampleFunc>
     void focus(u8 level, UpsampleFunc upsample);
 
+    template<typename DownsampleFunc>
+    void defocus(u8 level, DownsampleFunc downsample);
+
     u32 fracToLength(FracRView frac) const;
     void print() const;
 };
@@ -138,6 +141,7 @@ class PatchGraph
     std::vector<std::shared_ptr<Patch<T>>> patches1, patches2;
     std::vector<std::shared_ptr<Patch<T>>>*source, *target;
     void synchronizeEdges();
+
     std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>>
     split(std::shared_ptr<Patch<T>> patch, size_t where_, bool vertical);
 

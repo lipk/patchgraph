@@ -422,6 +422,32 @@ void Patch<T>::focus(u8 level, UpsampleFunc upsample)
 }
 
 template<typename T>
+template<typename DownsampleFunc>
+void Patch<T>::defocus(u8 level, DownsampleFunc downsample)
+{
+    if (level == 0) {
+        return;
+    }
+    assert(this->dimensions.denom() > level);
+    const u32 ratio = 1 << level;
+    const u32 newWidth = this->dimensions[0].nom() >> level;
+    const u32 newHeight = this->dimensions[0].nom() >> level;
+    std::vector<T> newData((newWidth + 2) * (newHeight * 2));
+    DataReader<T> reader(*this);
+    for (u32 y = 0; y < newHeight; ++y) {
+        for (u32 x = 0; x < newWidth; ++x) {
+            newData[(newWidth + 2) * y + x] = downsample(reader,
+                                                         1 + x * ratio,
+                                                         1 + y * ratio,
+                                                         1 + (x + 1) * ratio,
+                                                         1 + (y + 1) * ratio);
+        }
+    }
+    this->data = std::move(newData);
+    this->dimensions.defocus(level);
+}
+
+template<typename T>
 void Patch<T>::print() const
 {
     for (u32 y = 0; y < this->dimensions[1].nom() + 2; ++y) {
