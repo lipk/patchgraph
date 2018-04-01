@@ -503,24 +503,6 @@ size_t splitEdge(std::vector<std::shared_ptr<Section<T>>>& edge,
 }
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
-void PatchGraph<T, DownsampleFunc, UpsampleFunc>::split(size_t which,
-                                                        size_t where_,
-                                                        bool vertical)
-{
-    auto patch1 = this->patches1[which];
-    this->patches1.erase(this->patches1.begin() + which);
-    auto newPatches1 = this->split(std::move(patch1), where_, vertical);
-    this->patches1.push_back(std::move(newPatches1.first));
-    this->patches1.push_back(std::move(newPatches1.second));
-
-    auto patch2 = this->patches2[which];
-    this->patches2.erase(this->patches2.begin() + which);
-    auto newPatches2 = this->split(std::move(patch2), where_, vertical);
-    this->patches2.push_back(std::move(newPatches2.first));
-    this->patches2.push_back(std::move(newPatches2.second));
-}
-
-template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>>
 PatchGraph<T, DownsampleFunc, UpsampleFunc>::split(
     std::shared_ptr<Patch<T>> patch,
