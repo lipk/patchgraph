@@ -5,54 +5,8 @@
 #include <memory>
 #include <vector>
 
-enum class Side
-{
-    Left,
-    Right,
-    Up,
-    Down
-};
-
-Side operator~(const Side& side)
-{
-    switch (side) {
-        case Side::Left:
-            return Side::Right;
-        case Side::Right:
-            return Side::Left;
-        case Side::Up:
-            return Side::Down;
-        case Side::Down:
-            return Side::Up;
-    }
-}
-
 template<typename T>
 struct Patch;
-
-template<typename T>
-struct Section
-{
-    std::weak_ptr<Patch<T>> leftOrUpPatch, rightOrDownPatch;
-    frac1 length, leftOrUpPosition, rightOrDownPosition;
-    std::weak_ptr<Patch<T>>& patch(Side side);
-    frac1::lview position(Side side);
-};
-
-template<typename T>
-struct Corner
-{
-    std::weak_ptr<Patch<T>> patch;
-    frac1 position;
-    Side side;
-    Corner() = default;
-    Corner(const std::weak_ptr<Patch<T>>& patch, frac1 position, Side side)
-        : patch(patch)
-        , position(position)
-        , side(side)
-    {
-    }
-};
 
 template<typename T>
 struct DataReader
@@ -75,63 +29,6 @@ struct DataWriter
     {
     }
 };
-template<typename T>
-struct Patch
-{
-    frac2 dimensions, position;
-    std::vector<T> data;
-    std::vector<std::shared_ptr<Section<T>>> leftEdge, upEdge, rightEdge,
-        downEdge;
-    std::shared_ptr<Corner<T>> upLeftCorner, upRightCorner, downLeftCorner,
-        downRightCorner;
-    std::tuple<std::shared_ptr<Corner<T>>&, std::shared_ptr<Corner<T>>&>
-    corners(Side side);
-    std::vector<std::shared_ptr<Corner<T>>> cornersOnLeftEdge, cornersOnUpEdge,
-        cornersOnRightEdge, cornersOnDownEdge;
-    std::vector<std::shared_ptr<Corner<T>>>& cornersOnEdge(Side side);
-    std::vector<std::shared_ptr<Section<T>>>& edge(Side side);
-    frac2::lview parallelDimension(Side side);
-    frac2::lview orthogonalDimension(Side side);
-    frac2::lview parallelPosition(Side side);
-    frac2::lview orthogonalPosition(Side side);
-
-    T read(u32 x, u32 y) const;
-    void write(u32 x, u32 y, T value);
-    void writeEdge(u32 i, Side side, T value);
-
-    std::tuple<u32, u32, u32, u32, u32>
-    synchronizationParameters(FracRView pos, FracRView depth, Side side) const;
-    template<typename DownsampleFunc, typename UpsampleFunc>
-    void synchronizeSection(std::shared_ptr<Section<T>> section,
-                            Side side,
-                            DownsampleFunc downsample,
-                            UpsampleFunc upsample);
-    template<typename DownsampleFunc, typename UpsampleFunc>
-    void synchronizeCorner(const std::shared_ptr<Corner<T>>& corner,
-                           u32 thisX,
-                           u32 thisY,
-                           DownsampleFunc downsample,
-                           UpsampleFunc upsample);
-    template<typename DownsampleFunc, typename UpsampleFunc>
-    void synchronizeEdges(DownsampleFunc downsample, UpsampleFunc upsample);
-
-    template<typename UpsampleFunc>
-    void focus(u8 level, UpsampleFunc upsample);
-
-    template<typename DownsampleFunc>
-    void defocus(u8 level, DownsampleFunc downsample);
-
-    u32 fracToLength(FracRView frac) const;
-    void print() const;
-};
-
-template<typename T>
-std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>> splitAndFocus(
-    std::shared_ptr<Patch<T>>&& patch,
-    i32 where_i,
-    bool vertical,
-    u8 luFocus,
-    u8 rdFocus);
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 class PatchGraph
