@@ -39,9 +39,6 @@ class PatchGraph
     std::vector<std::shared_ptr<Patch<T>>>*source, *target;
     void synchronizeEdges();
 
-    std::pair<std::shared_ptr<Patch<T>>, std::shared_ptr<Patch<T>>>
-    split(std::shared_ptr<Patch<T>> patch, size_t where_, bool vertical);
-
     void focusAtPoints(
         size_t patchIndex,
         const std::vector<std::pair<u32, u32>>& points,
