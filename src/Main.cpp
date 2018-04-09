@@ -84,8 +84,7 @@ int main()
         }
     };
 
-    auto graph = createPatchGraph<double>(
-        7U, 7U, std::move(downsample), std::move(upsample));
+    auto graph = createPatchGraph<double>(7U, 7U, downsample, upsample);
 
     for (size_t y = 0; y < 7U; ++y) {
         for (size_t x = 0; x < 7U; ++x) {
@@ -94,12 +93,29 @@ int main()
     }
 
     graph.apply(
-        2, [](const DataReader<double>& reader, bool& focusHere, u32 x, u32 y) {
+        1, [](const DataReader<double>& reader, bool& focusHere, u32 x, u32 y) {
             focusHere = (x == 2 && y == 2) || (x == 6 && y == 6);
             return reader.read(x, y);
         });
 
-    graph.print();
+    int i = 0;
+    for (auto patch : graph.getSource()) {
+        if (patch->dimensions.denom() > 1) {
+            patch->defocus(1, downsample);
+        }
+        std::cout << i++ << ": " << patch << ' ' << patch->dimensions.nom(0)
+                  << ' ' << patch->dimensions.nom(1) << std::endl;
+    }
+    std::cout << graph.getSource()[2]->canMerge(Side::Up) << std::endl;
+
+    auto other = graph.getSource()[2]->canMerge(Side::Up);
+    auto merged = graph.getSource()[2]->merge(Side::Up);
+
+    graph.getSource().erase(graph.getSource().begin() + 4);
+    graph.getSource().erase(graph.getSource().begin() + 2);
+    graph.getSource().push_back(merged);
+
+    // graph.print();
     int hlx, hly;
     if (SDL_Init(SDL_INIT_VIDEO) == 0) {
         SDL_Window* window = NULL;

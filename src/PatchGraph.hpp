@@ -60,7 +60,7 @@ class PatchGraph
     void apply(size_t times, StencilFunc func);
 
     // TODO: remove this
-    const std::vector<std::shared_ptr<Patch<T>>>& getSource() const
+    std::vector<std::shared_ptr<Patch<T>>>& getSource()
     {
         return *this->source;
     }
@@ -72,8 +72,8 @@ template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 PatchGraph<T, DownsampleFunc, UpsampleFunc> createPatchGraph(
     u32 width,
     u32 height,
-    DownsampleFunc&& downsample,
-    UpsampleFunc&& upsample)
+    DownsampleFunc downsample,
+    UpsampleFunc upsample)
 {
     return PatchGraph<T, DownsampleFunc, UpsampleFunc>(
         width, height, std::move(downsample), std::move(upsample));
