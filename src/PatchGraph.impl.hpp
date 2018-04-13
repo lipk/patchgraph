@@ -56,8 +56,7 @@ struct Corner
         , position(position)
         , length(length)
         , side(side)
-    {
-    }
+    {}
 };
 
 template<typename T>
@@ -116,6 +115,9 @@ struct Patch
 
     u32 fracToLength(FracRView frac) const;
     void print() const;
+
+    Patch() = default;
+    Patch(u32 width, u32 height);
 };
 
 template<typename T>
@@ -213,6 +215,12 @@ const std::vector<std::shared_ptr<Section<T>>>& Patch<T>::edge(Side side) const
 {
     return const_cast<Patch<T>*>(this)->edge(side);
 }
+
+template<typename T>
+Patch<T>::Patch(u32 width, u32 height)
+    : dimensions(width, height)
+    , data((width + 2) * (height + 2))
+{}
 
 template<typename T>
 frac2::lview Patch<T>::parallelDimension(Side side)
@@ -639,6 +647,50 @@ void Patch<T>::print() const
 }
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+PatchGraph<T, DownsampleFunc, UpsampleFunc>::Grid::Grid(u32 width, u32 height)
+    : leftBound(std::make_shared<Patch<T>>(1, height))
+    , rightBound(std::make_shared<Patch<T>>(1, height))
+    , upBound(std::make_shared<Patch<T>>(width + 2, 1))
+    , downBound(std::make_shared<Patch<T>>(width + 2, 1))
+    , middle(1, std::make_shared<Patch<T>>(width, height))
+{
+    auto connectEdge = [&](u32 length,
+                           const frac1 pos,
+                           std::shared_ptr<Patch<T>>& bound,
+                           Side side) {
+        auto edge = std::make_shared<Section<T>>();
+        edge->patch(side) = bound;
+        edge->position(side) = pos[0];
+        edge->patch(~side) = this->middle[0];
+        edge->position(~side) = pos[0];
+        edge->length = frac1(length);
+
+        this->middle[0]->edge(side).push_back(edge);
+        bound->edge(~side).push_back(edge);
+    };
+
+    connectEdge(height, frac1(0), this->leftBound, Side::Left);
+    connectEdge(height, frac1(0), this->rightBound, Side::Right);
+    connectEdge(width, frac1(1), this->upBound, Side::Up);
+    connectEdge(width, frac1(1), this->downBound, Side::Down);
+
+    this->middle[0]->upLeftCorner = std::make_shared<Corner<T>>(
+        this->upBound, frac1(0), frac1(1), Side::Down);
+    this->middle[0]->upRightCorner = std::make_shared<Corner<T>>(
+        this->upBound, frac1(width + 1), frac1(1), Side::Down);
+    this->middle[0]->downLeftCorner = std::make_shared<Corner<T>>(
+        this->downBound, frac1(0), frac1(1), Side::Up);
+    this->middle[0]->downRightCorner = std::make_shared<Corner<T>>(
+        this->downBound, frac1(width + 1), frac1(1), Side::Up);
+
+    this->upBound->cornersOnDownEdge.push_back(this->middle[0]->upLeftCorner);
+    this->upBound->cornersOnDownEdge.push_back(this->middle[0]->upRightCorner);
+    this->downBound->cornersOnUpEdge.push_back(this->middle[0]->downLeftCorner);
+    this->downBound->cornersOnUpEdge.push_back(
+        this->middle[0]->downRightCorner);
+}
+
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 PatchGraph<T, DownsampleFunc, UpsampleFunc>::PatchGraph(
     u32 width,
     u32 height,
@@ -646,24 +698,16 @@ PatchGraph<T, DownsampleFunc, UpsampleFunc>::PatchGraph(
     UpsampleFunc&& upsample)
     : downsample(std::move(downsample))
     , upsample(std::move(upsample))
-    , source(&this->patches1)
-    , target(&this->patches2)
-{
-    auto patch1 = std::make_shared<Patch<T>>();
-    patch1->dimensions = frac2(width, height);
-    patch1->data.resize((width + 2) * (height + 2));
-    this->source->push_back(std::move(patch1));
-
-    auto patch2 = std::make_shared<Patch<T>>();
-    patch2->dimensions = frac2(width, height);
-    patch2->data.resize((width + 2) * (height + 2));
-    this->target->push_back(std::move(patch2));
-}
+    , grid1(width, height)
+    , grid2(width, height)
+    , source(&this->grid1)
+    , target(&this->grid2)
+{}
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 void PatchGraph<T, DownsampleFunc, UpsampleFunc>::synchronizeEdges()
 {
-    for (const auto& patch : *this->source) {
+    for (const auto& patch : this->source->middle) {
         patch->synchronizeEdges(this->downsample, this->upsample);
     }
 }
@@ -1060,7 +1104,7 @@ PatchGraph<T, DownsampleFunc, UpsampleFunc>::find(u32 x, u32 y) const
 {
     frac1 fx(x);
     frac1 fy(y);
-    for (const auto& patch : *this->source) {
+    for (const auto& patch : this->source->middle) {
         if (fx[0] >= patch->position[0] && fy[0] >= patch->position[1] &&
             fx[0] <= patch->position[0] + patch->dimensions[0] &&
             fy[0] <= patch->position[1] + patch->dimensions[1]) {
@@ -1113,10 +1157,10 @@ void PatchGraph<T, DownsampleFunc, UpsampleFunc>::focusAtPoints(
     std::vector<std::shared_ptr<Patch<T>>>& newTargetPatches)
 {
     assert(!points.empty());
-    auto sourcePatch = (*this->source)[patchIndex];
-    this->source->erase(this->source->begin() + patchIndex);
-    auto targetPatch = (*this->target)[patchIndex];
-    this->target->erase(this->target->begin() + patchIndex);
+    auto sourcePatch = this->source->middle[patchIndex];
+    this->source->middle.erase(this->source->middle.begin() + patchIndex);
+    auto targetPatch = this->target->middle[patchIndex];
+    this->target->middle.erase(this->target->middle.begin() + patchIndex);
     const u32 width = sourcePatch->dimensions.nom(0);
     const u32 height = targetPatch->dimensions.nom(0);
 
@@ -1176,18 +1220,18 @@ template<typename StencilFunc>
 void PatchGraph<T, DownsampleFunc, UpsampleFunc>::apply(size_t times,
                                                         StencilFunc func)
 {
-    assert(this->source->size() == this->target->size());
+    assert(this->source->middle.size() == this->target->middle.size());
     std::vector<std::pair<u32, u32>> focusPoints;
     std::vector<std::shared_ptr<Patch<T>>> newSourcePatches, newTargetPatches;
     for (size_t t = 0; t < times; ++t) {
         this->synchronizeEdges();
-        for (size_t i = 0; i < this->source->size(); ++i) {
-            auto sourcePatch = (*this->source)[i];
-            auto targetPatch = (*this->target)[i];
+        for (size_t i = 0; i < this->source->middle.size(); ++i) {
+            auto sourcePatch = this->source->middle[i];
+            auto targetPatch = this->target->middle[i];
             DataReader<T> reader(*sourcePatch);
             focusPoints.clear();
             for (u32 y = 1; y < sourcePatch->dimensions[1].nom() + 1; ++y) {
-                for (u32 x = 1; x < targetPatch->dimensions[0].nom() + 1; ++x) {
+                for (u32 x = 1; x < sourcePatch->dimensions[0].nom() + 1; ++x) {
                     bool focusHere = false;
                     targetPatch->write(x, y, func(reader, focusHere, x, y));
                     if (focusHere) {
@@ -1201,15 +1245,55 @@ void PatchGraph<T, DownsampleFunc, UpsampleFunc>::apply(size_t times,
                 i--;
             }
         }
-        this->source->insert(this->source->end(),
-                             newSourcePatches.begin(),
-                             newSourcePatches.end());
+        this->source->middle.insert(this->source->middle.end(),
+                                    newSourcePatches.begin(),
+                                    newSourcePatches.end());
         newSourcePatches.clear();
-        this->target->insert(this->target->end(),
-                             newTargetPatches.begin(),
-                             newTargetPatches.end());
+        this->target->middle.insert(this->target->middle.end(),
+                                    newTargetPatches.begin(),
+                                    newTargetPatches.end());
         newTargetPatches.clear();
         std::swap(this->source, this->target);
+    }
+}
+
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+template<typename StencilFunc>
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::leftBound(StencilFunc func)
+{
+    DataReader<T> reader(*this->source->leftBound);
+    for (u32 y = 1; y < this->source->leftBound->dimensions.nom(1); ++y) {
+        this->target->leftBound->write(1, y, func(reader, 1, y));
+    }
+}
+
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+template<typename StencilFunc>
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::rightBound(StencilFunc func)
+{
+    DataReader<T> reader(*this->source->rightBound);
+    for (u32 y = 1; y < this->source->rightBound->dimensions.nom(1); ++y) {
+        this->target->rightBound->write(1, y, func(reader, 1, y));
+    }
+}
+
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+template<typename StencilFunc>
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::upBound(StencilFunc func)
+{
+    DataReader<T> reader(*this->source->upBound);
+    for (u32 x = 1; x < this->source->upBound->dimensions.nom(0); ++x) {
+        this->target->upBound->write(x, 1, func(reader, x, 1));
+    }
+}
+
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+template<typename StencilFunc>
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::downBound(StencilFunc func)
+{
+    DataReader<T> reader(*this->source->downBound);
+    for (u32 x = 1; x < this->source->downBound->dimensions.nom(0); ++x) {
+        this->target->downBound->write(x, 1, func(reader, x, 1));
     }
 }
 

@@ -15,8 +15,7 @@ struct DataReader
     inline T read(u32 x, u32 y) const;
     DataReader(const Patch<T>& patch)
         : patch(patch)
-    {
-    }
+    {}
 };
 
 template<typename T>
@@ -26,17 +25,24 @@ struct DataWriter
     inline void write(u32 x, u32 y, T value);
     DataWriter(Patch<T>& patch)
         : patch(patch)
-    {
-    }
+    {}
 };
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 class PatchGraph
 {
+    struct Grid
+    {
+        std::shared_ptr<Patch<T>> leftBound, rightBound, upBound, downBound;
+        std::vector<std::shared_ptr<Patch<T>>> middle;
+
+        Grid(u32 width, u32 height);
+    };
+
     DownsampleFunc downsample;
     UpsampleFunc upsample;
-    std::vector<std::shared_ptr<Patch<T>>> patches1, patches2;
-    std::vector<std::shared_ptr<Patch<T>>>*source, *target;
+    Grid grid1, grid2;
+    Grid *source, *target;
     void synchronizeEdges();
 
     void focusAtPoints(
@@ -58,11 +64,19 @@ class PatchGraph
 
     template<typename StencilFunc>
     void apply(size_t times, StencilFunc func);
+    template<typename StencilFunc>
+    void leftBound(StencilFunc func);
+    template<typename StencilFunc>
+    void rightBound(StencilFunc func);
+    template<typename StencilFunc>
+    void upBound(StencilFunc func);
+    template<typename StencilFunc>
+    void downBound(StencilFunc func);
 
     // TODO: remove this
     std::vector<std::shared_ptr<Patch<T>>>& getSource()
     {
-        return *this->source;
+        return this->source->middle;
     }
 
     void print() const;
