@@ -1216,6 +1216,37 @@ void PatchGraph<T, DownsampleFunc, UpsampleFunc>::focusAtPoints(
 }
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
+void PatchGraph<T, DownsampleFunc, UpsampleFunc>::defocus(size_t patchIndex)
+{
+    auto mergeIfCan = [](size_t which,
+                         Side direction,
+                         std::vector<std::shared_ptr<Patch<T>>>& patchList) {
+        auto other = patchList[which]->canMerge(direction);
+        if (other == nullptr) {
+            return false;
+        }
+        auto merged = patchList[which]->merge(direction);
+        patchList.erase(patchList.begin() + which);
+        std::remove(patchList.begin(), patchList.end(), other);
+        patchList.push_back(std::move(merged));
+        return true;
+    };
+    auto doDefocusAndMerge =
+        [&](std::vector<std::shared_ptr<Patch<T>>>& patchList) {
+            size_t which = patchIndex;
+            patchList[which]->defocus;
+            while (mergeIfCan(which, Side::Left, patchList) ||
+                   mergeIfCan(which, Side::Right, patchList) ||
+                   mergeIfCan(which, Side::Up, patchList) ||
+                   mergeIfCan(which, Side::Down, patchList)) {
+                which = patchList.size() - 1;
+            }
+        };
+    doDefocusAndMerge(this->grid1.middle);
+    doDefocusAndMerge(this->grid2.middle);
+}
+
+template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 template<typename StencilFunc>
 void PatchGraph<T, DownsampleFunc, UpsampleFunc>::apply(size_t times,
                                                         StencilFunc func)

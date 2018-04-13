@@ -51,6 +51,8 @@ class PatchGraph
         std::vector<std::shared_ptr<Patch<T>>>& newSourcePatches,
         std::vector<std::shared_ptr<Patch<T>>>& newTargetPatches);
 
+    void defocus(size_t patchIndex);
+
     std::tuple<std::shared_ptr<Patch<T>>, u32, u32> find(u32 x, u32 y) const;
 
   public:
