@@ -92,28 +92,42 @@ int main()
         }
     }
 
-    graph.apply(
-        1, [](const DataReader<double>& reader, bool& focusHere, u32 x, u32 y) {
-            focusHere = (x == 2 && y == 2) || (x == 6 && y == 6);
-            return reader.read(x, y);
-        });
+    graph.apply(1,
+                [](const DataReader<double>& reader,
+                   bool& focusHere,
+                   bool& defocusHere,
+                   u32 x,
+                   u32 y) {
+                    focusHere = (x == 2 && y == 2) || (x == 6 && y == 6);
+                    return reader.read(x, y);
+                });
+    graph.apply(1,
+                [](const DataReader<double>& reader,
+                   bool& focusHere,
+                   bool& defocusHere,
+                   u32 x,
+                   u32 y) {
+                    defocusHere = true;
+                    return reader.read(x, y);
+                });
 
-    int i = 0;
-    for (auto patch : graph.getSource()) {
-        if (patch->dimensions.denom() > 1) {
-            patch->defocus(1, downsample);
-        }
-        std::cout << i++ << ": " << patch << ' ' << patch->dimensions.nom(0)
-                  << ' ' << patch->dimensions.nom(1) << std::endl;
-    }
-    std::cout << graph.getSource()[2]->canMerge(Side::Up) << std::endl;
+    //    int i = 0;
+    //    for (auto patch : graph.getSource()) {
+    //        if (patch->dimensions.denom() > 1) {
+    //            patch->defocus(1, downsample);
+    //        }
+    //        std::cout << i++ << ": " << patch << ' ' <<
+    //        patch->dimensions.nom(0)
+    //                  << ' ' << patch->dimensions.nom(1) << std::endl;
+    //    }
+    //    std::cout << graph.getSource()[2]->canMerge(Side::Up) << std::endl;
 
-    auto other = graph.getSource()[2]->canMerge(Side::Up);
-    auto merged = graph.getSource()[2]->merge(Side::Up);
+    //    auto other = graph.getSource()[2]->canMerge(Side::Up);
+    //    auto merged = graph.getSource()[2]->merge(Side::Up);
 
-    graph.getSource().erase(graph.getSource().begin() + 4);
-    graph.getSource().erase(graph.getSource().begin() + 2);
-    graph.getSource().push_back(merged);
+    //    graph.getSource().erase(graph.getSource().begin() + 4);
+    //    graph.getSource().erase(graph.getSource().begin() + 2);
+    //    graph.getSource().push_back(merged);
 
     // graph.print();
     int hlx, hly;

@@ -72,6 +72,7 @@ struct Patch
     corners(Side side);
     std::vector<std::shared_ptr<Corner<T>>> cornersOnLeftEdge, cornersOnUpEdge,
         cornersOnRightEdge, cornersOnDownEdge;
+    bool splittable;
     std::vector<std::shared_ptr<Corner<T>>>& cornersOnEdge(Side side);
     std::vector<std::shared_ptr<Section<T>>>& edge(Side side);
     const std::vector<std::shared_ptr<Section<T>>>& edge(Side side) const;
@@ -116,7 +117,7 @@ struct Patch
     u32 fracToLength(FracRView frac) const;
     void print() const;
 
-    Patch() = default;
+    Patch();
     Patch(u32 width, u32 height);
 };
 
@@ -220,6 +221,12 @@ template<typename T>
 Patch<T>::Patch(u32 width, u32 height)
     : dimensions(width, height)
     , data((width + 2) * (height + 2))
+    , splittable(true)
+{}
+
+template<typename T>
+Patch<T>::Patch()
+    : splittable(true)
 {}
 
 template<typename T>
@@ -648,46 +655,29 @@ void Patch<T>::print() const
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
 PatchGraph<T, DownsampleFunc, UpsampleFunc>::Grid::Grid(u32 width, u32 height)
-    : leftBound(std::make_shared<Patch<T>>(1, height))
-    , rightBound(std::make_shared<Patch<T>>(1, height))
-    , upBound(std::make_shared<Patch<T>>(width + 2, 1))
-    , downBound(std::make_shared<Patch<T>>(width + 2, 1))
-    , middle(1, std::make_shared<Patch<T>>(width, height))
+    : leftBound()
+    , rightBound()
+    , upBound()
+    , downBound()
+    , middle()
 {
-    auto connectEdge = [&](u32 length,
-                           const frac1 pos,
-                           std::shared_ptr<Patch<T>>& bound,
-                           Side side) {
-        auto edge = std::make_shared<Section<T>>();
-        edge->patch(side) = bound;
-        edge->position(side) = pos[0];
-        edge->patch(~side) = this->middle[0];
-        edge->position(~side) = pos[0];
-        edge->length = frac1(length);
+    auto middle = std::make_shared<Patch<T>>(width + 2, height + 2);
+    std::tie(middle, this->rightBound) = middle->split(width + 1, true);
+    std::tie(this->leftBound, middle) = middle->split(1, true);
+    std::tie(middle, this->downBound) = middle->split(height + 1, false);
+    std::tie(this->upBound, middle) = middle->split(1, false);
 
-        this->middle[0]->edge(side).push_back(edge);
-        bound->edge(~side).push_back(edge);
-    };
+    this->leftBound->splittable = false;
+    this->rightBound->splittable = false;
+    this->upBound->splittable = false;
+    this->downBound->splittable = false;
+    middle->position = frac2(0, 0);
+    this->middle.push_back(middle);
 
-    connectEdge(height, frac1(0), this->leftBound, Side::Left);
-    connectEdge(height, frac1(0), this->rightBound, Side::Right);
-    connectEdge(width, frac1(1), this->upBound, Side::Up);
-    connectEdge(width, frac1(1), this->downBound, Side::Down);
-
-    this->middle[0]->upLeftCorner = std::make_shared<Corner<T>>(
-        this->upBound, frac1(0), frac1(1), Side::Down);
-    this->middle[0]->upRightCorner = std::make_shared<Corner<T>>(
-        this->upBound, frac1(width + 1), frac1(1), Side::Down);
-    this->middle[0]->downLeftCorner = std::make_shared<Corner<T>>(
-        this->downBound, frac1(0), frac1(1), Side::Up);
-    this->middle[0]->downRightCorner = std::make_shared<Corner<T>>(
-        this->downBound, frac1(width + 1), frac1(1), Side::Up);
-
-    this->upBound->cornersOnDownEdge.push_back(this->middle[0]->upLeftCorner);
-    this->upBound->cornersOnDownEdge.push_back(this->middle[0]->upRightCorner);
-    this->downBound->cornersOnUpEdge.push_back(this->middle[0]->downLeftCorner);
-    this->downBound->cornersOnUpEdge.push_back(
-        this->middle[0]->downRightCorner);
+    this->leftBound->splittable = false;
+    this->rightBound->splittable = false;
+    this->upBound->splittable = false;
+    this->downBound->splittable = false;
 }
 
 template<typename T, typename DownsampleFunc, typename UpsampleFunc>
@@ -759,6 +749,9 @@ std::shared_ptr<Patch<T>> Patch<T>::canMerge(Side side) const
         return nullptr;
     }
     auto other = edge[0]->patch(side).lock();
+    if (!this->splittable || !other->splittable) {
+        return nullptr;
+    }
     if (other->dimensions.denom() != this->dimensions.denom() ||
         other->parallelDimension(side) != this->parallelDimension(side)) {
         return nullptr;
@@ -1227,14 +1220,19 @@ void PatchGraph<T, DownsampleFunc, UpsampleFunc>::defocus(size_t patchIndex)
         }
         auto merged = patchList[which]->merge(direction);
         patchList.erase(patchList.begin() + which);
-        std::remove(patchList.begin(), patchList.end(), other);
+        for (size_t i = 0; i < patchList.size(); ++i) {
+            if (patchList[i] == other) {
+                patchList.erase(patchList.begin() + i);
+                break;
+            }
+        }
         patchList.push_back(std::move(merged));
         return true;
     };
     auto doDefocusAndMerge =
         [&](std::vector<std::shared_ptr<Patch<T>>>& patchList) {
             size_t which = patchIndex;
-            patchList[which]->defocus;
+            patchList[which]->defocus(1, this->downsample);
             while (mergeIfCan(which, Side::Left, patchList) ||
                    mergeIfCan(which, Side::Right, patchList) ||
                    mergeIfCan(which, Side::Up, patchList) ||
@@ -1254,6 +1252,7 @@ void PatchGraph<T, DownsampleFunc, UpsampleFunc>::apply(size_t times,
     assert(this->source->middle.size() == this->target->middle.size());
     std::vector<std::pair<u32, u32>> focusPoints;
     std::vector<std::shared_ptr<Patch<T>>> newSourcePatches, newTargetPatches;
+    bool defocus = true;
     for (size_t t = 0; t < times; ++t) {
         this->synchronizeEdges();
         for (size_t i = 0; i < this->source->middle.size(); ++i) {
@@ -1264,16 +1263,23 @@ void PatchGraph<T, DownsampleFunc, UpsampleFunc>::apply(size_t times,
             for (u32 y = 1; y < sourcePatch->dimensions[1].nom() + 1; ++y) {
                 for (u32 x = 1; x < sourcePatch->dimensions[0].nom() + 1; ++x) {
                     bool focusHere = false;
-                    targetPatch->write(x, y, func(reader, focusHere, x, y));
+                    bool defocusHere = false;
+                    targetPatch->write(
+                        x, y, func(reader, focusHere, defocusHere, x, y));
                     if (focusHere) {
                         focusPoints.emplace_back(x - 1, y - 1);
                     }
+                    defocus &= defocusHere;
                 }
             }
+            assert(!defocus || focusPoints.empty());
             if (!focusPoints.empty()) {
                 this->focusAtPoints(
                     i, focusPoints, newSourcePatches, newTargetPatches);
                 i--;
+            }
+            if (defocus && sourcePatch->dimensions.denom() > 1) {
+                this->defocus(i);
             }
         }
         this->source->middle.insert(this->source->middle.end(),
